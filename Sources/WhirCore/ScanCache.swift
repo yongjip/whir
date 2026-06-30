@@ -5,7 +5,7 @@ import Foundation
 /// Cost is derived from stored token sums at read time, so a pricing change
 /// needs no cache invalidation; `version` guards against schema changes.
 enum ScanCache {
-    static let version = 2
+    static let version = 3   // v3: Codex fork-prefix dedup (drops replayed parent usage)
 
     private struct File: Codable {
         var version: Int
