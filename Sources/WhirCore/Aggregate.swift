@@ -49,11 +49,12 @@ public struct FileAgg: Codable {
     public var costByProject: [String: Double]  // Claude only (scan-time pricing; cache invalidates on pricing change)
     public var seenRequestIDs: Set<String>      // Claude dedup
     public var lastModel: String?               // Codex: carry turn_context model across a resume
+    public var lastTokenFP: String?             // Codex: drop consecutive duplicate token_count snapshots
 
     public init(provider: Provider) {
         self.provider = provider
         inode = ""; size = 0; mtime = 0; offset = 0
-        models = [:]; costByProject = [:]; seenRequestIDs = []; lastModel = nil
+        models = [:]; costByProject = [:]; seenRequestIDs = []; lastModel = nil; lastTokenFP = nil
     }
 }
 

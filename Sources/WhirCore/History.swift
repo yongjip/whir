@@ -60,6 +60,7 @@ struct HourAgg: Codable {
     var seenRequestIDs: Set<String> = []
     var lastModel: String?
     var lastProject: String?
+    var lastTokenFP: String?   // drop consecutive duplicate token_count snapshots
     init(provider: Provider) { self.provider = provider }
 }
 
@@ -153,6 +154,7 @@ enum CodexHistory {
             var curModel = fa!.lastModel
             var curProject = fa!.lastProject
             var skipper = fa!.offset == 0 ? CodexPrefixSkipper(forkPath: path, roots: roots) : nil
+            var lastFP = fa!.lastTokenFP
             while let (line, terminated) = reader.next() {
                 if !terminated { continue }
                 let isCtx = line.contains("\"turn_context\"")
@@ -169,6 +171,10 @@ enum CodexHistory {
                       let last = payload.dict("info")?.dict("last_token_usage") else { continue }
                 let tup = [last.int("input_tokens"), last.int("cached_input_tokens"), last.int("output_tokens")]
                 if skipper?.shouldSkip(tup) == true { continue }   // inherited fork replay — counted in the parent
+                let total = payload.dict("info")?.dict("total_token_usage")
+                let fp = "\(obj.str("timestamp") ?? "")|\(tup[0])|\(tup[1])|\(tup[2])|\(total?.int("input_tokens") ?? -1)|\(total?.int("output_tokens") ?? -1)"
+                if fp == lastFP { continue }   // consecutive duplicate token_count snapshot
+                lastFP = fp
                 let model = curModel ?? "unknown"
                 if Pricing.excludedModels.contains(model) { continue }
                 var t = ModelTokens()
@@ -176,7 +182,7 @@ enum CodexHistory {
                 add(&fa!, hour: keyer.key(obj.str("timestamp")), provider: .codex, model: model,
                     project: curProject ?? "?", tokens: t)
             }
-            fa!.lastModel = curModel; fa!.lastProject = curProject
+            fa!.lastModel = curModel; fa!.lastProject = curProject; fa!.lastTokenFP = lastFP
             fa!.offset = reader.safeOffset; fa!.size = id.size; fa!.mtime = id.mtime
             aggs[path] = fa
         }

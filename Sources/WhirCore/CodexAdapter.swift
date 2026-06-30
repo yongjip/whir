@@ -55,6 +55,7 @@ public struct CodexAdapter {
             var curModel = fa!.lastModel    // carry model across the resume boundary
             // On a from-scratch read of a forked session, skip the replayed parent prefix.
             var skipper = fa!.offset == 0 ? CodexPrefixSkipper(forkPath: path, roots: roots) : nil
+            var lastFP = fa!.lastTokenFP    // drop consecutive duplicate token_count snapshots
             while let (line, terminated) = reader.next() {
                 if !terminated { continue }                          // mid-write tail: re-read when completed
                 let isCtx = line.contains("\"turn_context\"")
@@ -72,6 +73,11 @@ public struct CodexAdapter {
                 let tup = [last.int("input_tokens"), last.int("cached_input_tokens"), last.int("output_tokens")]
                 if skipper?.shouldSkip(tup) == true { continue }   // inherited fork replay — counted in the parent
 
+                let total = payload.dict("info")?.dict("total_token_usage")
+                let fp = "\(obj.str("timestamp") ?? "")|\(tup[0])|\(tup[1])|\(tup[2])|\(total?.int("input_tokens") ?? -1)|\(total?.int("output_tokens") ?? -1)"
+                if fp == lastFP { continue }   // consecutive duplicate token_count snapshot (Codex re-emit)
+                lastFP = fp
+
                 let model = curModel ?? "unknown"
                 if Pricing.excludedModels.contains(model) { continue }
 
@@ -80,6 +86,7 @@ public struct CodexAdapter {
                 fa!.models[model] = (fa!.models[model] ?? ModelTokens()) + t
             }
             fa!.lastModel = curModel
+            fa!.lastTokenFP = lastFP
             fa!.offset = reader.safeOffset
             fa!.size = id.size
             fa!.mtime = id.mtime
