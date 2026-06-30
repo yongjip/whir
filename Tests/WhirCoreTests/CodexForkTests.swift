@@ -64,4 +64,28 @@ final class CodexForkTests: XCTestCase {
         let (i, c, o) = sum(aggs)
         XCTAssertEqual(i, 300); XCTAssertEqual(c, 150); XCTAssertEqual(o, 30)
     }
+
+    // Codex sometimes re-emits the SAME token_count snapshot back-to-back; that
+    // consecutive duplicate must be counted once. A later event with identical
+    // values but a different timestamp is a real turn and must NOT be dropped.
+    func testConsecutiveDuplicateSnapshotDeduped() {
+        let dir = NSTemporaryDirectory() + "whir-fork-" + UUID().uuidString
+        try! FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let ctx = "{\"timestamp\":\"2026-06-01T00:00:01.000Z\",\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-5.5\",\"cwd\":\"/x/proj\"}}"
+        write(dir, "rollout-2026-06-01T00-00-00-dupzzzzzz.jsonl", [
+            "{\"timestamp\":\"2026-06-01T00:00:00.000Z\",\"type\":\"session_meta\",\"payload\":{\"session_id\":\"dupzzzzzz\",\"cwd\":\"/x/proj\"}}",
+            ctx,
+            tc("2026-06-01T00:00:02.000Z", 100, 50, 10),
+            tc("2026-06-01T00:00:02.000Z", 100, 50, 10),   // exact consecutive duplicate → drop
+            tc("2026-06-01T00:00:03.000Z", 200, 100, 20),
+            tc("2026-06-01T00:00:04.000Z", 100, 50, 10),   // same values, new ts → real turn, keep
+        ])
+        var aggs: [String: FileAgg] = [:]
+        CodexAdapter(root: dir).update(&aggs, window: .all)
+        let (i, c, o) = sum(aggs)
+        XCTAssertEqual(i, 400, "400 = 100 + 200 + 100; 500 would mean the duplicate wasn't dropped")
+        XCTAssertEqual(c, 200)
+        XCTAssertEqual(o, 40)
+    }
 }
