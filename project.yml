@@ -1,0 +1,41 @@
+# XcodeGen spec for the Mac App Store build.
+#   brew install xcodegen && xcodegen generate
+# Then open Whir.xcodeproj, set your Team, Archive, and submit.
+# The CLI / core stay on SwiftPM (Package.swift); this only wraps the app target.
+name: Whir
+options:
+  bundleIdPrefix: com.whir
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+packages:
+  WhirCore:
+    path: .
+targets:
+  Whir:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/WhirApp
+      - path: Assets.xcassets
+    dependencies:
+      - package: WhirCore
+        product: WhirCore
+    settings:
+      base:
+        PRODUCT_NAME: Whir
+        PRODUCT_BUNDLE_IDENTIFIER: com.whir.Whir
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.9"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_LSUIElement: YES          # menu-bar agent, no Dock icon
+        INFOPLIST_KEY_CFBundleDisplayName: Whir
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO   # no network → skips the export-compliance prompt each upload
+        INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026"
+        CODE_SIGN_ENTITLEMENTS: Whir.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: "33S36XZ32U"   # real Team ID (cert OU); SL4QF3B7JC was the cert UID, not the team

@@ -1,0 +1,43 @@
+import SwiftUI
+import AppKit
+
+// App entry point + scenes. Views/models live in their own files:
+// PopoverView, UsageModel, HistoryView, HistoryModel, SubscriptionSettings, Formatting.
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory) // menu-bar agent, no Dock icon
+        // Pre-warm the all-time history in the background so opening the
+        // History window is instant instead of showing a cold "Building…".
+        HistoryModel.shared.start()
+    }
+}
+
+@main
+struct WhirApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    @StateObject private var model = UsageModel()
+
+    var body: some Scene {
+        MenuBarExtra {
+            PopoverView(model: model)
+        } label: {
+            Text(model.menuTitle)
+        }
+        .menuBarExtraStyle(.window)
+
+        Window("Usage history", id: "history") {
+            HistoryView(model: .shared)
+                .task { HistoryModel.shared.start() }   // idempotent; pre-warm usually ran already
+        }
+        .defaultSize(width: 920, height: 580)
+
+        // A real Window (not a sheet/popover) so its TextFields keep focus —
+        // the menu-bar popover panel dismisses the instant a field is clicked.
+        Window("Subscriptions", id: "settings") {
+            SubscriptionSettings()
+        }
+        .windowResizability(.contentSize)
+    }
+}
