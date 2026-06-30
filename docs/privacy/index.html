@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Whir — Privacy Policy</title>
+<style>
+  :root{--bg:#0d0e11;--card:#16181d;--line:#23262d;--text:#ebecef;--dim:#9a9ca6;--teal:#2dd4bf}
+  *{box-sizing:border-box}
+  body{margin:0;background:#0d0e11;color:var(--text);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"SF Pro Text",Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:680px;margin:0 auto;padding:56px 24px 80px}
+  a{color:var(--teal)}
+  h1{font-size:30px;letter-spacing:-.02em;margin:0 0 6px}
+  .upd{color:var(--dim);font-size:13px;margin:0 0 32px}
+  h2{font-size:18px;margin:34px 0 8px}
+  p,li{color:#d4d6dc}
+  .dim{color:var(--dim)}
+  code{background:#16181d;border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-size:13px}
+  ul{padding-left:20px}
+  .back{display:inline-block;margin-bottom:28px;color:var(--dim);text-decoration:none;font-size:14px}
+  hr{border:none;border-top:1px solid var(--line);margin:40px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../">← Whir</a>
+  <h1>Privacy Policy</h1>
+  <p class="upd">Last updated: 2026-07-01</p>
+
+  <p>Whir is a macOS menu-bar app that estimates the API-equivalent <strong>usage value</strong> of your local AI coding activity (Claude Code and Codex). It is designed to be private by construction.</p>
+
+  <h2>What Whir reads</h2>
+  <p>Whir reads only the local log files those tools already write on your Mac:</p>
+  <ul>
+    <li><code>~/.claude/projects/**</code> (Claude Code)</li>
+    <li><code>~/.codex/sessions/**</code> (Codex)</li>
+  </ul>
+  <p>From those files it uses only <strong>token counts, model names, timestamps, and project folder names</strong> to compute cost estimates. It does <strong>not</strong> read your prompts, your code, tool output, conversation content, or any authentication tokens (it never reads <code>~/.codex/auth.json</code>).</p>
+
+  <h2>What Whir does NOT do</h2>
+  <ul>
+    <li><strong>No data collection.</strong> No account, no server, no analytics.</li>
+    <li><strong>No network.</strong> Whir makes no network connections. Nothing leaves your Mac.</li>
+    <li><strong>No keychain / credential access.</strong> Whir never reads the macOS keychain or stored credentials.</li>
+    <li><strong>No third parties.</strong> Nothing is shared with anyone, because nothing is collected or transmitted.</li>
+  </ul>
+  <p>All processing happens entirely on your device. Results are stored only in a local cache on your own Mac (<code>~/Library/Application Support/Whir</code>).</p>
+
+  <h2>Data retention &amp; deletion</h2>
+  <p>Whir stores nothing off-device. To remove all of Whir's local data, delete the app and its <code>~/Library/Application Support/Whir</code> folder.</p>
+
+  <h2>Verify it yourself</h2>
+  <p>Whir is open source — you can read exactly what it does at <a href="https://github.com/yongjip/whir">github.com/yongjip/whir</a>.</p>
+
+  <hr>
+  <h2>Contact</h2>
+  <p>Questions about this policy: <a href="mailto:yongjip@gmail.com">yongjip@gmail.com</a></p>
+</div>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Whir — what your AI coding habit actually costs</title>
+<meta name="description" content="A local-first macOS menu-bar app that estimates the API-equivalent cost of your Claude Code and Codex usage — computed entirely on your Mac, no credentials, no network.">
+<style>
+  :root{--bg:#0d0e11;--card:#16181d;--line:#23262d;--text:#ebecef;--dim:#9a9ca6;--teal:#2dd4bf;--blue:#3b82f6;--orange:#f59e0b}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#1a1d24,#0d0e11);color:var(--text);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text",Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:680px;margin:0 auto;padding:64px 24px 80px}
+  .icon{width:72px;height:72px;display:block;margin:0 auto 22px}
+  h1{font-size:40px;line-height:1.1;letter-spacing:-.02em;text-align:center;margin:0 0 10px}
+  .tag{text-align:center;color:var(--dim);font-size:18px;margin:0 auto 36px;max-width:520px}
+  .num{text-align:center;font-size:56px;font-weight:600;letter-spacing:-.02em;margin:0}
+  .numlabel{text-align:center;color:var(--dim);font-size:13px;margin:2px 0 40px}
+  .grid{display:grid;gap:14px;margin:0 0 40px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+  .card h3{margin:0 0 4px;font-size:15px}
+  .card p{margin:0;color:var(--dim);font-size:14px}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin:8px 0 0}
+  .btn{display:inline-block;padding:11px 18px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:500;
+    border:1px solid var(--line);color:var(--text)}
+  .btn.primary{background:linear-gradient(180deg,var(--blue),#2563eb);border-color:transparent}
+  code{background:#0a0b0d;border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-size:13px}
+  footer{margin-top:54px;text-align:center;color:var(--dim);font-size:13px}
+  footer a{color:var(--dim)}
+  .accent{color:var(--teal)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <svg class="icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <rect x="4" y="4" width="92" height="92" rx="24" fill="#16181d" stroke="#23262d"/>
+    <rect x="26" y="58" width="13" height="18" rx="3" fill="#2dd4bf"/>
+    <rect x="43" y="44" width="13" height="32" rx="3" fill="#3b82f6"/>
+    <rect x="60" y="30" width="13" height="46" rx="3" fill="#f59e0b"/>
+  </svg>
+  <h1>Whir</h1>
+  <p class="tag">What your AI coding habit actually costs — one clean number in your Mac menu bar, computed entirely on your machine, without touching a single credential.</p>
+
+  <p class="num">$10,288</p>
+  <p class="numlabel">estimated usage value · last 30 days · API-equivalent</p>
+
+  <div class="grid">
+    <div class="card"><h3>Restraint</h3><p>One number, a few rows, nothing else. The anti-clutter usage monitor.</p></div>
+    <div class="card"><h3>Credential-free trust</h3><p>Reads only local Claude Code &amp; Codex logs — token counts, models, timestamps. <span class="accent">Never your keychain, never the network.</span> Open source, so you can verify it.</p></div>
+    <div class="card"><h3>The ROI reframe</h3><p>You pay a flat subscription — Whir shows how much value you actually used against it.</p></div>
+  </div>
+
+  <div class="cta">
+    <a class="btn primary" href="https://github.com/yongjip/whir">View on GitHub</a>
+    <a class="btn" href="privacy/">Privacy</a>
+    <a class="btn" href="support/">Support</a>
+  </div>
+
+  <footer>
+    Local logs only · no keychain, no network · estimates, not a bill.<br>
+    © 2026 · <a href="privacy/">Privacy</a> · <a href="support/">Support</a> · <a href="https://github.com/yongjip/whir">GitHub</a>
+  </footer>
+</div>
+</body>
+</html>

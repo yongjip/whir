@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Whir — Support</title>
+<style>
+  :root{--bg:#0d0e11;--card:#16181d;--line:#23262d;--text:#ebecef;--dim:#9a9ca6;--teal:#2dd4bf}
+  *{box-sizing:border-box}
+  body{margin:0;background:#0d0e11;color:var(--text);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"SF Pro Text",Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:680px;margin:0 auto;padding:56px 24px 80px}
+  a{color:var(--teal)}
+  h1{font-size:30px;letter-spacing:-.02em;margin:0 0 24px}
+  h2{font-size:17px;margin:30px 0 6px}
+  p,li{color:#d4d6dc}
+  .dim{color:var(--dim)}
+  code{background:#16181d;border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-size:13px}
+  ul{padding-left:20px}
+  .back{display:inline-block;margin-bottom:28px;color:var(--dim);text-decoration:none;font-size:14px}
+  .contact{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-top:24px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../">← Whir</a>
+  <h1>Support</h1>
+
+  <p>Whir shows the API-equivalent cost of your local Claude Code and Codex usage, in your Mac menu bar. Everything is computed on your machine — no account, no network.</p>
+
+  <h2>The menu-bar number is $0 / looks empty</h2>
+  <p>The headline is <strong>today's</strong> spend, so it starts at $0 each morning and grows as you use Claude Code / Codex. Open the popover to see your last-30-days value and the per-provider breakdown.</p>
+
+  <h2>It says "No logs found"</h2>
+  <p>Whir reads <code>~/.claude/projects</code> and <code>~/.codex/sessions</code>. If you haven't used those tools yet, or installed them elsewhere, there's nothing to read. In the Mac App Store build, grant access to each folder once when prompted (press <code>⇧⌘.</code> to reveal hidden folders in the picker).</p>
+
+  <h2>The numbers are estimates</h2>
+  <p>Whir multiplies token counts by published API prices (stamped with an "as of" date). Subscription quotas aren't token-denominated, so this is <em>usage value</em>, not your actual bill.</p>
+
+  <h2>Launch at login</h2>
+  <p>Toggle it in the settings window (gear icon). If macOS shows it as needing approval, enable Whir under <strong>System Settings → General → Login Items</strong>.</p>
+
+  <div class="contact">
+    <h2 style="margin-top:0">Contact</h2>
+    <p style="margin-bottom:0">Email <a href="mailto:yongjip@gmail.com">yongjip@gmail.com</a>, or open an issue at <a href="https://github.com/yongjip/whir/issues">github.com/yongjip/whir/issues</a>.</p>
+  </div>
+</div>
+</body>
+</html>
