@@ -30,19 +30,29 @@ final class LineReader {
     /// lines advance `safeOffset`; callers must skip unterminated lines so a
     /// mid-write final record isn't counted now and again once completed.
     func next() -> (line: String, terminated: Bool)? {
+        guard let raw = nextRaw() else { return nil }
+        return (raw.string, raw.terminated)
+    }
+
+    /// Like `next()` but yields the line as raw UTF-8 bytes, so callers can run a
+    /// cheap byte-level `contains` before paying for String creation + JSON
+    /// parsing. On multi-GB logs that prefilter dominates: Swift's Unicode-aware
+    /// String.contains measured ~30x slower than a raw byte scan. The returned
+    /// `bytes` view is valid only until the next read from this reader.
+    func nextRaw() -> RawLine? {
         while true {
             if let nl = indexOfNewline() {
-                let line = Array(buffer[pos..<nl])
+                let slice = buffer[pos..<nl]
                 safeOffset += (nl - pos) + 1
                 pos = nl + 1
-                return (String(decoding: line, as: UTF8.self), true)
+                return RawLine(bytes: slice, terminated: true)
             }
             if pos > 0 { buffer.removeFirst(pos); pos = 0 }   // compact unread tail to front
             if atEOF {
                 if pos >= buffer.count { return nil }
-                let line = String(decoding: buffer[pos...], as: UTF8.self)
+                let slice = buffer[pos...]
                 pos = buffer.count                            // unterminated tail: don't advance safeOffset
-                return (line, false)
+                return RawLine(bytes: slice, terminated: false)
             }
             let chunk = handle.readData(ofLength: chunkSize)
             if chunk.isEmpty { atEOF = true } else { buffer.append(contentsOf: chunk) }
@@ -57,6 +67,47 @@ final class LineReader {
         }
         return nil
     }
+}
+
+// MARK: - raw line + byte-level prefilter
+
+/// A single log line as raw UTF-8 bytes. Callers test for a needle with the
+/// byte-level `contains` (cheap) and only materialize `string` when a line is
+/// relevant — avoiding String creation + Unicode-aware String.contains across
+/// every line of multi-GB logs. `bytes` is a view into the reader's buffer and
+/// is valid only until the next read.
+struct RawLine {
+    let bytes: ArraySlice<UInt8>
+    let terminated: Bool
+    @inline(__always) func contains(_ needle: [UInt8]) -> Bool { bytes.containsBytes(needle) }
+    var string: String { String(decoding: bytes, as: UTF8.self) }
+}
+
+extension ArraySlice where Element == UInt8 {
+    /// Raw byte substring search — no Unicode normalization, unlike String.contains.
+    func containsBytes(_ needle: [UInt8]) -> Bool {
+        let n = needle.count
+        guard n > 0, count >= n else { return false }
+        let first = needle[0]
+        let hi = endIndex - n
+        var i = startIndex
+        while i <= hi {
+            if self[i] == first {
+                var k = 1
+                while k < n && self[i &+ k] == needle[k] { k &+= 1 }
+                if k == n { return true }
+            }
+            i &+= 1
+        }
+        return false
+    }
+}
+
+/// Precomputed byte needles for the per-line prefilter (the JSON keys, quoted).
+enum LineNeedle {
+    static let tokenCount = Array("\"token_count\"".utf8)
+    static let turnContext = Array("\"turn_context\"".utf8)
+    static let assistant = Array("\"assistant\"".utf8)
 }
 
 // MARK: - JSON helpers (logs have variable, version-dependent shapes — read defensively)

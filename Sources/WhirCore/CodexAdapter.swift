@@ -56,12 +56,12 @@ public struct CodexAdapter {
             // On a from-scratch read of a forked session, skip the replayed parent prefix.
             var skipper = fa!.offset == 0 ? CodexPrefixSkipper(forkPath: path, roots: roots) : nil
             var lastFP = fa!.lastTokenFP    // drop consecutive duplicate token_count snapshots
-            while let (line, terminated) = reader.next() {
-                if !terminated { continue }                          // mid-write tail: re-read when completed
-                let isCtx = line.contains("\"turn_context\"")
-                let isTok = line.contains("\"token_count\"")
+            while let raw = reader.nextRaw() {
+                if !raw.terminated { continue }                      // mid-write tail: re-read when completed
+                let isCtx = raw.contains(LineNeedle.turnContext)
+                let isTok = raw.contains(LineNeedle.tokenCount)
                 if !isCtx && !isTok { continue }
-                guard let obj = jsonObject(line) else { continue }
+                guard let obj = jsonObject(raw.string) else { continue }
 
                 if obj.str("type") == "turn_context" {
                     if let m = obj.dict("payload")?.str("model") { curModel = m }
