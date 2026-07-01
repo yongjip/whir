@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct WhirApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    @StateObject private var model = UsageModel()
+    @State private var model = UsageModel()
 
     var body: some Scene {
         MenuBarExtra {
