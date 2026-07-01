@@ -88,7 +88,6 @@ public struct CodexAdapter {
             fa!.lastModel = curModel
             fa!.lastTokenFP = lastFP
             fa!.offset = reader.safeOffset
-            fa!.size = id.size
             fa!.mtime = id.mtime
             aggs[path] = fa
         }

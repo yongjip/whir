@@ -42,7 +42,6 @@ func + (a: ModelTokens, b: ModelTokens) -> ModelTokens {
 public struct FileAgg: Codable {
     public var provider: Provider
     public var inode: String                   // file identity; change ⇒ re-read from 0
-    public var size: Int                        // last-seen size
     public var mtime: Double                     // last-seen mtime; detects same-length in-place edits
     public var offset: Int                      // byte offset after last newline-terminated line processed
     public var models: [String: ModelTokens]
@@ -53,7 +52,7 @@ public struct FileAgg: Codable {
 
     public init(provider: Provider) {
         self.provider = provider
-        inode = ""; size = 0; mtime = 0; offset = 0
+        inode = ""; mtime = 0; offset = 0
         models = [:]; costByProject = [:]; seenRequestIDs = []; lastModel = nil; lastTokenFP = nil
     }
 }
