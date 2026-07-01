@@ -4,31 +4,34 @@ import WhirCore
 struct LegendItem: Identifiable { var id: String { name }; let name: String; let color: Color }
 
 @MainActor
-final class HistoryModel: ObservableObject {
+@Observable
+final class HistoryModel {
     /// One app-wide instance: pre-warmed at launch, observed by the window.
     static let shared = HistoryModel()
 
-    @Published var granularity: Granularity = .day
-    @Published var groupBy: GroupBy = .provider
-    @Published var points: [GroupedPoint] = []
-    @Published var selectedKey: String?
-    @Published var loading = true       // no data shown yet (first build)
-    @Published var building = false     // background scan in progress
-    @Published private(set) var colorMap: [String: Color] = [:]
+    var granularity: Granularity = .day
+    var groupBy: GroupBy = .provider
+    var points: [GroupedPoint] = []
+    var selectedKey: String?
+    var loading = true       // no data shown yet (first build)
+    var building = false     // background scan in progress
+    private(set) var colorMap: [String: Color] = [:]
 
     /// Menu-bar / popover headline: TODAY's spend (with provider split) for the
     /// glanceable number, plus the rolling last-30-days total for the ROI line.
     /// Independent of the granularity picker. nil until first built.
     struct Headline: Equatable { let today: Double; let codex: Double; let claude: Double; let last30: Double }
-    @Published private(set) var headline: Headline?
-    @Published var hasReadableRoot = true
+    private(set) var headline: Headline?
+    var hasReadableRoot = true
 
-    private let engine = HistoryEngine()
-    private var snapshot: HistorySnapshot?
-    private var started = false
-    private var scanTask: Task<Void, Never>?   // in-flight scan; nil = idle
-    private var autoTimer: Timer?
-    private let palette: [Color] = [.orange, .blue, .teal, .purple, .pink, .green, .indigo]
+    // Non-UI internals — excluded from observation. `snapshot` always mutates
+    // alongside a tracked property (points/headline/loading), so views still update.
+    @ObservationIgnored private let engine = HistoryEngine()
+    @ObservationIgnored private var snapshot: HistorySnapshot?
+    @ObservationIgnored private var started = false
+    @ObservationIgnored private var scanTask: Task<Void, Never>?   // in-flight scan; nil = idle
+    @ObservationIgnored private var autoTimer: Timer?
+    @ObservationIgnored private let palette: [Color] = [.orange, .blue, .teal, .purple, .pink, .green, .indigo]
 
     /// Per-model + per-project breakdown of the selected bucket.
     var detail: BucketDetail? { selectedKey.flatMap { snapshot?.detail(for: $0, granularity) } }
@@ -102,7 +105,7 @@ final class HistoryModel: ObservableObject {
     }
 
     /// Local "yyyy-MM-dd" — matches the History day-bucket keys.
-    static var todayKey: String {
+    nonisolated static var todayKey: String {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         f.locale = Locale(identifier: "en_US_POSIX")

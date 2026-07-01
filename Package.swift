@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "whir",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v14)],   // floor raised for @Observable (Observation framework); App Store build already targets 14
     products: [
         .library(name: "WhirCore", targets: ["WhirCore"]),
         .executable(name: "whir", targets: ["whir"]),

@@ -2,7 +2,7 @@ import SwiftUI
 import WhirCore
 
 struct HistoryView: View {
-    @ObservedObject var model: HistoryModel
+    @Bindable var model: HistoryModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
