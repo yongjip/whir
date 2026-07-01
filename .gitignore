@@ -3,6 +3,7 @@
 DerivedData/
 *.xcodeproj
 .DS_Store
+.idea/
 
 # generated
 UsageRunner.xcodeproj/
