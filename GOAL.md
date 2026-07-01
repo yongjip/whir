@@ -10,17 +10,17 @@ Name: **Whir** (verified clear of macOS/dev-tool/trademark collisions; bundle id
 
 ## Why it's different
 
-We don't win on features or provider count — that race is lost to free OSS (CodexBar, 53 providers) and the data is free on disk. We win on three things, all defensible by *posture*, not feature:
+Whir doesn't compete on feature count or number of providers — the raw data is already on disk and other tools cover breadth. Its focus is three things, defensible by *posture*, not by feature list:
 
-1. **Restraint.** One number, a few rows, nothing else. The anti-CodexBar. "Too cluttered" is the most common note on every competitor; we make minimalism the product.
-2. **Credential-free trust.** Read-only local logs only. We never read the keychain, never touch OAuth tokens, never make a network call for the core. *"We never ask for your keychain"* — a promise the incumbents structurally can't make (CodexBar reads Claude's OAuth from the keychain).
-3. **The ROI reframe.** Usage value vs. flat subscription cost: *"you pay $X/mo → you used $Y of value."* Turns cost-anxiety into "am I getting my money's worth." Nobody shows this.
+1. **Restraint.** One number, a few rows, nothing else — minimalism as the product, not a settings screen.
+2. **Credential-free trust.** Read-only local logs only — never the keychain, never OAuth tokens, no network call for the core. A privacy claim a skeptic can verify by inspection.
+3. **The ROI reframe.** Usage value vs. flat subscription cost: *"you pay $X/mo → you used $Y of value."* Turns cost-anxiety into "am I getting my money's worth."
 
 ## Scope
 
 **Now:** coding agents with local logs — Claude Code (`~/.claude/projects`) + Codex (`~/.codex/sessions`). Estimated usage value as the headline metric.
 
-**Later:** Cursor / Gemini CLI / Copilot adapters · today/5h/weekly windows · ROI multiplier (subscription input) · live menu-bar indicator.
+**Later:** Cursor / Gemini CLI / Copilot adapters · live CPU-driven menu-bar indicator · desktop widget.
 
 ## Non-goals
 
@@ -37,5 +37,7 @@ We don't win on features or provider count — that race is lost to free OSS (Co
 
 ## Status
 
-- ✅ Parser core (`whir-core`) — Claude + Codex adapters, cache-aware cost model, verified against the ccusage-style oracle to the cent.
-- ⬜ Next: SwiftUI `MenuBarExtra` app rendering the aggregated-cost popover.
+- ✅ Parser core (`WhirCore`) — Claude + Codex adapters, incremental cache, cost model, verified against a ccusage-style oracle to the cent.
+- ✅ SwiftUI `MenuBarExtra` app — today's number, history + drilldown, ROI, system monitor, launch-at-login, Shortcuts (App Intent).
+- ✅ Packaged for the Mac App Store (in review) and direct distribution.
+- ⬜ Next: more agent adapters (Cursor / Gemini CLI / Copilot); optional desktop widget.
