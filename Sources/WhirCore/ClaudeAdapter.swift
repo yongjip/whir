@@ -31,10 +31,10 @@ public struct ClaudeAdapter {
             guard let reader = LineReader(path: path, startOffset: fa!.offset) else {
                 aggs[path] = fa; continue
             }
-            while let (line, terminated) = reader.next() {
-                if !terminated { continue }                          // mid-write tail: re-read when completed
-                if !line.contains("\"assistant\"") { continue }
-                guard let obj = jsonObject(line), obj.str("type") == "assistant" else { continue }
+            while let raw = reader.nextRaw() {
+                if !raw.terminated { continue }                      // mid-write tail: re-read when completed
+                if !raw.contains(LineNeedle.assistant) { continue }
+                guard let obj = jsonObject(raw.string), obj.str("type") == "assistant" else { continue }
                 if case .month(let m) = window,
                    !(obj.str("timestamp")?.hasPrefix(m) ?? false) { continue }
 

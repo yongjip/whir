@@ -113,10 +113,10 @@ enum ClaudeHistory {
             if reset { fa = HourAgg(provider: .claude); fa!.inode = id.inode }
             if !reset && id.size == fa!.offset { aggs[path] = fa; continue }
             guard let reader = LineReader(path: path, startOffset: fa!.offset) else { aggs[path] = fa; continue }
-            while let (line, terminated) = reader.next() {
-                if !terminated { continue }
-                if !line.contains("\"assistant\"") { continue }
-                guard let obj = jsonObject(line), obj.str("type") == "assistant" else { continue }
+            while let raw = reader.nextRaw() {
+                if !raw.terminated { continue }
+                if !raw.contains(LineNeedle.assistant) { continue }
+                guard let obj = jsonObject(raw.string), obj.str("type") == "assistant" else { continue }
                 if let rid = obj.str("requestId") {
                     if fa!.seenRequestIDs.contains(rid) { continue }
                     fa!.seenRequestIDs.insert(rid)
@@ -155,12 +155,12 @@ enum CodexHistory {
             var curProject = fa!.lastProject
             var skipper = fa!.offset == 0 ? CodexPrefixSkipper(forkPath: path, roots: roots) : nil
             var lastFP = fa!.lastTokenFP
-            while let (line, terminated) = reader.next() {
-                if !terminated { continue }
-                let isCtx = line.contains("\"turn_context\"")
-                let isTok = line.contains("\"token_count\"")
+            while let raw = reader.nextRaw() {
+                if !raw.terminated { continue }
+                let isCtx = raw.contains(LineNeedle.turnContext)
+                let isTok = raw.contains(LineNeedle.tokenCount)
                 if !isCtx && !isTok { continue }
-                guard let obj = jsonObject(line) else { continue }
+                guard let obj = jsonObject(raw.string) else { continue }
                 if obj.str("type") == "turn_context" {
                     let p = obj.dict("payload")
                     if let m = p?.str("model") { curModel = m }

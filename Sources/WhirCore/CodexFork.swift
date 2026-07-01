@@ -28,9 +28,9 @@ enum CodexFork {
         }
         guard let pp = parentPath, let reader = LineReader(path: pp, startOffset: 0) else { return nil }
         var seq: [[Int]] = []
-        while let (line, terminated) = reader.next() {
-            if !terminated || !line.contains("\"token_count\"") { continue }
-            guard let obj = jsonObject(line),
+        while let raw = reader.nextRaw() {
+            if !raw.terminated || !raw.contains(LineNeedle.tokenCount) { continue }   // byte-level prefilter
+            guard let obj = jsonObject(raw.string),
                   let payload = obj.dict("payload"), payload.str("type") == "token_count",
                   let last = payload.dict("info")?.dict("last_token_usage") else { continue }
             seq.append([last.int("input_tokens"), last.int("cached_input_tokens"), last.int("output_tokens")])
