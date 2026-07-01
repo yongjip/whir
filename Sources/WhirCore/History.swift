@@ -53,7 +53,6 @@ struct BucketData: Codable {
 struct HourAgg: Codable {
     var provider: Provider
     var inode = ""
-    var size = 0
     var mtime = 0.0
     var offset = 0
     var buckets: [String: BucketData] = [:]   // localHourKey -> bucket
@@ -127,7 +126,7 @@ enum ClaudeHistory {
                 add(&fa!, hour: keyer.key(obj.str("timestamp")), provider: .claude, model: model,
                     project: projectName(obj.str("cwd")), tokens: claudeTokens(usage))
             }
-            fa!.offset = reader.safeOffset; fa!.size = id.size; fa!.mtime = id.mtime
+            fa!.offset = reader.safeOffset; fa!.mtime = id.mtime
             aggs[path] = fa
         }
     }
@@ -183,7 +182,7 @@ enum CodexHistory {
                     project: curProject ?? "?", tokens: t)
             }
             fa!.lastModel = curModel; fa!.lastProject = curProject; fa!.lastTokenFP = lastFP
-            fa!.offset = reader.safeOffset; fa!.size = id.size; fa!.mtime = id.mtime
+            fa!.offset = reader.safeOffset; fa!.mtime = id.mtime
             aggs[path] = fa
         }
     }
