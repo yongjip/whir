@@ -4,10 +4,11 @@ import WhirCore
 
 /// Live CPU / RAM / disk, refreshed on a timer while the popover is open.
 @MainActor
-final class SystemMonitor: ObservableObject {
-    @Published var snapshot = SystemSnapshot()
-    private let sampler = SystemSampler()
-    private var timer: Timer?
+@Observable
+final class SystemMonitor {
+    var snapshot = SystemSnapshot()
+    @ObservationIgnored private let sampler = SystemSampler()
+    @ObservationIgnored private var timer: Timer?
 
     func start() {
         guard timer == nil else { return }

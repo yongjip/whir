@@ -3,10 +3,10 @@ import AppKit
 import WhirCore
 
 struct PopoverView: View {
-    @ObservedObject var model: UsageModel
+    var model: UsageModel
     @Environment(\.openWindow) private var openWindow
     @State private var needsGrant = FolderAccess.needsOnboarding
-    @StateObject private var monitor = SystemMonitor()
+    @State private var monitor = SystemMonitor()
     @AppStorage("sub.claude") private var claudeSub = 0.0
     @AppStorage("sub.codex") private var codexSub = 0.0
     private var totalSub: Double { claudeSub + codexSub }

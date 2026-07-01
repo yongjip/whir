@@ -1,48 +1,38 @@
 import SwiftUI
-import Combine
 import WhirCore
 
 /// Projection of HistoryModel.shared for the menu bar + popover headline:
 /// TODAY's spend as the glanceable number, plus the last-30-days total for the
 /// ROI line. The History model owns the scan; this just mirrors its results.
+///
+/// Everything here is a computed read of HistoryModel.shared. Because that model
+/// is `@Observable`, SwiftUI tracks these reads transitively — so the old
+/// `objectWillChange.sink` re-projection glue is gone.
 @MainActor
-final class UsageModel: ObservableObject {
-    struct Row: Identifiable { let id = UUID(); let name: String; let cost: Double; let pct: Double }
+@Observable
+final class UsageModel {
+    // Identify by name (stable) so ForEach doesn't churn on every recompute.
+    struct Row: Identifiable { let name: String; let cost: Double; let pct: Double; var id: String { name } }
 
-    @Published var loading = true
-    @Published var refreshing = false
-    @Published var total = 0.0          // today's spend (the headline number)
-    @Published var rows: [Row] = []     // today's provider split
-    @Published var last30 = 0.0         // last-30-days value, for the ROI line
-    @Published var hasReadableRoot = true
+    private var h: HistoryModel { HistoryModel.shared }
 
-    private var cancellable: AnyCancellable?
+    var loading: Bool { h.headline == nil && h.loading }
+    var refreshing: Bool { h.building }
+    var hasReadableRoot: Bool { h.hasReadableRoot }
+    var total: Double { h.headline?.today ?? 0 }        // today's spend (the headline number)
+    var last30: Double { h.headline?.last30 ?? 0 }      // last-30-days value, for the ROI line
 
-    init() {
-        let h = HistoryModel.shared
-        sync(h)
-        // Re-project whenever the shared history model changes. objectWillChange
-        // fires before the value is set, so read on the next tick.
-        cancellable = h.objectWillChange.sink { [weak self] _ in
-            Task { @MainActor in self?.sync(HistoryModel.shared) }
-        }
+    /// Today's provider split.
+    var rows: [Row] {
+        guard let hl = h.headline else { return [] }
+        return [
+            Row(name: "Codex", cost: hl.codex, pct: hl.today > 0 ? hl.codex / hl.today : 0),
+            Row(name: "Claude Code", cost: hl.claude, pct: hl.today > 0 ? hl.claude / hl.today : 0),
+        ]
     }
 
     var menuTitle: String { loading ? "AI $…" : money0(total) }
 
     /// The History model owns the scan + its auto-refresh timer; just delegate.
-    func refresh() { HistoryModel.shared.refresh() }
-
-    private func sync(_ h: HistoryModel) {
-        refreshing = h.building
-        hasReadableRoot = h.hasReadableRoot
-        guard let hl = h.headline else { loading = h.loading; return }
-        total = hl.today
-        last30 = hl.last30
-        rows = [
-            Row(name: "Codex", cost: hl.codex, pct: hl.today > 0 ? hl.codex / hl.today : 0),
-            Row(name: "Claude Code", cost: hl.claude, pct: hl.today > 0 ? hl.claude / hl.today : 0),
-        ]
-        loading = false
-    }
+    func refresh() { h.refresh() }
 }
