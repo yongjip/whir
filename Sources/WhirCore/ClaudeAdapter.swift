@@ -52,7 +52,6 @@ public struct ClaudeAdapter {
                 fa!.costByProject[proj, default: 0] += cost(provider: .claude, model: model, tokens: t).usd
             }
             fa!.offset = reader.safeOffset
-            fa!.size = id.size
             fa!.mtime = id.mtime
             aggs[path] = fa
         }
