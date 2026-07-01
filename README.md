@@ -5,10 +5,11 @@
 Whir reads the local usage logs that Claude Code and Codex already write, and shows the API-equivalent **usage value** of what you ran — live in the menu bar, with history and a system monitor. Local-first: it never reads your keychain, never sees prompts or code, and makes no network calls.
 
 ## Features
-- **Menu bar** — this month's estimated usage value at a glance; click for a Claude/Codex breakdown.
+- **Menu bar** — today's estimated usage value at a glance; click for a Claude/Codex breakdown and last-30-day ROI.
 - **History** — usage by **hour / day / week / month**, split by **provider or model**, with a per-period **drilldown** (token table: input / cache / output / cost, by model and by project).
 - **ROI** — enter your monthly subscription and see *"N× your $X/mo"* — value vs. what you actually pay.
 - **System monitor** — live **CPU / RAM / disk**, RunCat-style.
+- **Shortcuts / Spotlight** — an App Intent returns today's usage value for automations (reads the local cache; no folder access needed).
 - **Private by design** — read-only on `~/.claude` & `~/.codex` metadata; no keychain, no network, no prompt/code upload.
 
 ## Privacy
@@ -31,7 +32,7 @@ swift run whir --all                      # all time
 swift run whir --history --by day --last 14
 swift run whir --history --by month --detail 2026-05   # model/project drilldown
 swift run whir --system                   # CPU / RAM / disk
-swift test                                        # unit + incremental + history tests
+swift test                                        # unit, incremental, history, and dedup tests
 ```
 First run is a full scan; an incremental cache (per-file byte-offset cursors) makes later runs ~instant.
 
@@ -60,5 +61,6 @@ scripts/, store/, Casks/    packaging + distribution
 ## Roadmap
 - Cursor / Gemini CLI / Copilot adapters
 - Reactive CPU-driven menu-bar animation
-- Sparkle auto-update + launch-at-login
-- App icon ✓, incremental cache ✓, history + drilldown ✓, ROI ✓, MAS + direct packaging ✓
+- Desktop / Notification Centre widget
+- Sparkle auto-update
+- App icon ✓, incremental cache ✓, history + drilldown ✓, ROI ✓, launch-at-login ✓, Shortcuts (App Intent) ✓, MAS + direct packaging ✓
