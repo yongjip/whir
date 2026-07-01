@@ -5,7 +5,4 @@ DerivedData/
 .DS_Store
 .idea/
 
-# generated
-UsageRunner.xcodeproj/
-
 dist/
