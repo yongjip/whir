@@ -8,6 +8,8 @@
     <string>Whir</string>
     <key>CFBundleIdentifier</key>
     <string>com.whir.Whir</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.developer-tools</string>
     <key>CFBundleExecutable</key>
     <string>Whir</string>
     <key>CFBundleIconFile</key>
