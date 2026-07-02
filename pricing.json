@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "asOf": "2026-07-02",
+  "comment": "Whir model price table ($/1M tokens), prefix-matched (longest wins); fetched daily by the app. Auto-synced from LiteLLM's model_prices_and_context_window.json by scripts/sync_pricing.py \u2014 edit that script, not this file. Claude cache multipliers are fixed in code: read 0.1x input, write-5m 1.25x, write-1h 2x.",
+  "claude": [
+    {
+      "prefix": "claude-3-7-sonnet-20250219",
+      "input": 3,
+      "output": 15
+    },
+    {
+      "prefix": "claude-3-opus-20240229",
+      "input": 15,
+      "output": 75
+    },
+    {
+      "prefix": "claude-4-opus-20250514",
+      "input": 15,
+      "output": 75
+    },
+    {
+      "prefix": "claude-4-sonnet-20250514",
+      "input": 3,
+      "output": 15
+    },
+    {
+      "prefix": "claude-fable-5",
+      "input": 10,
+      "output": 50
+    },
+    {
+      "prefix": "claude-haiku-4",
+      "input": 1,
+      "output": 5
+    },
+    {
+      "prefix": "claude-haiku-4-5",
+      "input": 1,
+      "output": 5
+    },
+    {
+      "prefix": "claude-haiku-4-5-20251001",
+      "input": 1,
+      "output": 5
+    },
+    {
+      "prefix": "claude-opus-4",
+      "input": 5,
+      "output": 25
+    },
+    {
+      "prefix": "claude-opus-4-1",
+      "input": 15,
+      "output": 75
+    },
+    {
+      "prefix": "claude-opus-4-1-20250805",
+      "input": 15,
+      "output": 75
+    },
+    {
+      "prefix": "claude-opus-4-20250514",
+      "input": 15,
+      "output": 75
+    },
+    {
+      "prefix": "claude-opus-4-5",
+      "input": 5,
+      "output": 25
+    },
+    {
+      "prefix": "claude-opus-4-5-20251101",
+      "input": 5,
+      "output": 25
+    },
+    {
+      "prefix": "claude-opus-4-6",
+      "input": 5,
+      "output": 25
+    },
+    {
+      "prefix": "claude-opus-4-6-20260205",
+      "input": 5,
+      "output": 25
+    },
+    {
+      "prefix": "claude-opus-4-7",
+      "input": 5,
+      "output": 25
+    },
+    {
+      "prefix": "claude-opus-4-7-20260416",
+      "input": 5,
+      "output": 25
+    },
+    {
+      "prefix": "claude-opus-4-8",
+      "input": 5,
+      "output": 25
+    },
+    {
+      "prefix": "claude-sonnet-4",
+      "input": 3,
+      "output": 15
+    },
+    {
+      "prefix": "claude-sonnet-4-20250514",
+      "input": 3,
+      "output": 15
+    },
+    {
+      "prefix": "claude-sonnet-4-5",
+      "input": 3,
+      "output": 15
+    },
+    {
+      "prefix": "claude-sonnet-4-5-20250929",
+      "input": 3,
+      "output": 15
+    },
+    {
+      "prefix": "claude-sonnet-4-6",
+      "input": 3,
+      "output": 15
+    },
+    {
+      "prefix": "claude-sonnet-5",
+      "input": 3,
+      "output": 15
+    }
+  ],
+  "openai": [
+    {
+      "prefix": "gpt-5.5",
+      "input": 5,
+      "cachedInput": 0.5,
+      "output": 30,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.4-mini",
+      "input": 0.75,
+      "cachedInput": 0.075,
+      "output": 4.5,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.4",
+      "input": 2.5,
+      "cachedInput": 0.25,
+      "output": 15,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.3-codex-spark",
+      "input": 0.5,
+      "cachedInput": 0.05,
+      "output": 4,
+      "estimate": true
+    }
+  ]
+}

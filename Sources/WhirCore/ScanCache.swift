@@ -33,10 +33,13 @@ enum ScanCache {
         return file.aggs
     }
 
-    static func save(_ aggs: [String: FileAgg], window: Window) {
+    /// `pricingAsOf` must be captured at scan START: if a price update lands
+    /// mid-scan, the stamp won't match `Pricing.asOf` on the next load and the
+    /// mixed-price aggregates are rescanned instead of persisting.
+    static func save(_ aggs: [String: FileAgg], window: Window, pricingAsOf: String) {
         let dir = directory()
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        let file = File(version: version, window: window.key, pricingAsOf: Pricing.asOf, aggs: aggs)
+        let file = File(version: version, window: window.key, pricingAsOf: pricingAsOf, aggs: aggs)
         guard let data = try? JSONEncoder().encode(file) else { return }
         try? data.write(to: URL(fileURLWithPath: path(for: window)), options: .atomic)
     }

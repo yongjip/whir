@@ -36,7 +36,7 @@ final class CostTests: XCTestCase {
 
     func testOpenAILongestPrefixWins() {
         // "gpt-5.4-mini" must not resolve to the "gpt-5.4" tier
-        XCTAssertEqual(Pricing.openAIPrice("gpt-5.4-mini")?.input, 0.25)
+        XCTAssertEqual(Pricing.openAIPrice("gpt-5.4-mini")?.input, 0.75)
         XCTAssertEqual(Pricing.openAIPrice("gpt-5.4")?.input, 2.5)
     }
 
