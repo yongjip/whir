@@ -179,7 +179,7 @@ struct PopoverView: View {
 
             HStack(spacing: 6) {
                 Image(systemName: "lock.open").font(.system(size: 11)).foregroundStyle(.tertiary)
-                Text("Local logs only · no keychain, no network")
+                Text("Local logs only · no keychain · nothing uploaded")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
             Text(Pricing.isStale()

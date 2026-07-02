@@ -33,7 +33,7 @@ targets:
         INFOPLIST_KEY_LSUIElement: YES          # menu-bar agent, no Dock icon
         INFOPLIST_KEY_CFBundleDisplayName: Whir
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
-        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO   # no network → skips the export-compliance prompt each upload
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO   # only Apple TLS (exempt) for the price-table fetch → still NO; skips the export-compliance prompt
         INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026"
         CODE_SIGN_ENTITLEMENTS: Whir.entitlements
         ENABLE_HARDENED_RUNTIME: YES
