@@ -19,7 +19,7 @@ struct HistoryView: View {
                     detailPanel
                 }
             }
-            Text("Local logs only · no keychain, no network · prices as of \(Pricing.asOf)")
+            Text("Local logs only · no keychain · nothing uploaded · prices as of \(Pricing.asOf)")
                 .font(.caption2).foregroundStyle(.tertiary)
         }
         .padding(16)
@@ -116,11 +116,11 @@ struct HistoryView: View {
             head("Input", 56); head("Cache", 56); head("Output", 56); head("Cost", 72)
         }
     }
-    private func usageRow(_ name: AnyView, _ t: ModelTokens, _ cost: Double) -> some View {
+    private func usageRow(_ name: AnyView, _ t: ModelTokens, _ cost: Double, priced: Bool = true) -> some View {
         HStack(spacing: 8) {
             name.frame(width: 176, alignment: .leading)
             num(tokenShort(t.input), 56); num(tokenShort(t.cacheAll), 56)
-            num(tokenShort(t.output), 56); num(moneyAdaptive(cost), 72)
+            num(tokenShort(t.output), 56); num(priced ? moneyAdaptive(cost) : "—", 72)
         }
     }
 
@@ -133,7 +133,12 @@ struct HistoryView: View {
                         Text("By model").font(.caption).foregroundStyle(.secondary)
                         columnHeader
                         ForEach(d.models) { m in
-                            usageRow(AnyView(Text(m.model).font(.system(size: 11)).lineLimit(1)), m.tokens, m.cost)
+                            usageRow(AnyView(Text(m.model).font(.system(size: 11)).lineLimit(1)),
+                                     m.tokens, m.cost, priced: m.priced)
+                        }
+                        if d.models.contains(where: { !$0.priced }) {
+                            Text("— price unknown for this model (not included in totals)")
+                                .font(.system(size: 10)).foregroundStyle(.tertiary)
                         }
                     }
                     if !d.projects.isEmpty {

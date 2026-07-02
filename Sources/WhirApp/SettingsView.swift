@@ -7,6 +7,7 @@ import ServiceManagement
 struct SubscriptionSettings: View {
     @AppStorage("sub.claude") private var claudeSub = 0.0
     @AppStorage("sub.codex") private var codexSub = 0.0
+    @AppStorage(PricingUpdater.defaultsKey) private var autoUpdatePricing = true
     @Environment(\.dismiss) private var dismiss
 
     // Drive the toggle straight from the real login-item status (no @State
@@ -40,6 +41,16 @@ struct SubscriptionSettings: View {
 
             Toggle("Launch Whir at login", isOn: launchAtLogin)
                 .font(.system(size: 13))
+
+            Toggle("Update model prices automatically", isOn: $autoUpdatePricing)
+                .font(.system(size: 13))
+                .onChange(of: autoUpdatePricing) { _, on in
+                    // Fetch right away on opt-in instead of waiting for the daily timer.
+                    if on { Task { @MainActor in PricingUpdater.shared.refreshNow() } }
+                }
+            Text("Once a day, Whir downloads its price table (pricing.json) from GitHub — its only network request. Nothing about you or your usage is sent.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             HStack { Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.defaultAction) }
         }

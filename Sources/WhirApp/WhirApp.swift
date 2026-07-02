@@ -8,6 +8,9 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory) // menu-bar agent, no Dock icon
+        // Adopt a previously fetched price table BEFORE the first scan, then
+        // keep it fresh (a daily fetch — the app's only network call).
+        PricingUpdater.shared.start()
         // Pre-warm the all-time history in the background so opening the
         // History window is instant instead of showing a cold "Building…".
         HistoryModel.shared.start()
