@@ -6,8 +6,13 @@
     <key>com.apple.security.app-sandbox</key>
     <true/>
     <!-- Read-only access to folders the user explicitly selects (~/.claude, ~/.codex),
-         persisted via security-scoped bookmarks. No other file access, no network. -->
+         persisted via security-scoped bookmarks. No other file access. -->
     <key>com.apple.security.files.user-selected.read-only</key>
+    <true/>
+    <!-- Outbound HTTPS for exactly one request: refreshing the model price table
+         (pricing.json) from GitHub. Off-switchable in Settings; no usage data is
+         ever sent. See PricingUpdater.swift. -->
+    <key>com.apple.security.network.client</key>
     <true/>
 </dict>
 </plist>
