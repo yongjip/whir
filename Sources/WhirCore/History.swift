@@ -23,6 +23,7 @@ public struct BucketDetail {
         public let provider: Provider
         public let model: String
         public let cost: Double
+        public let priced: Bool   // false = model missing from the price table (render — not $0.00)
         public let tokens: ModelTokens
     }
     public struct ProjectRow: Identifiable {
@@ -301,10 +302,10 @@ func buildDetail(_ aggs: [String: HourAgg], _ bucketKey: String, _ g: Granularit
         }
     }
     let modelRows = modelTokens.values.map {
-        BucketDetail.ModelRow(provider: $0.provider, model: $0.model,
-                              cost: cost(provider: $0.provider, model: $0.model, tokens: $0.tokens).usd,
-                              tokens: $0.tokens)
-    }.sorted { $0.cost > $1.cost }
+        let c = cost(provider: $0.provider, model: $0.model, tokens: $0.tokens)
+        return BucketDetail.ModelRow(provider: $0.provider, model: $0.model,
+                                     cost: c.usd, priced: c.priced, tokens: $0.tokens)
+    }.sorted { $0.cost != $1.cost ? $0.cost > $1.cost : $0.tokens.total > $1.tokens.total }
     let projectRows = projects.map {
         BucketDetail.ProjectRow(project: $0.key, cost: $0.value.cost, tokens: $0.value.tokens)
     }.sorted { $0.cost > $1.cost }
