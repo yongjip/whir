@@ -128,6 +128,15 @@ extension Dictionary where Key == String, Value == Any {
         default: return 0
         }
     }
+    /// Optional (unlike `int`): pricing rows must be rejected, not zeroed, when malformed.
+    func num(_ key: String) -> Double? {
+        switch self[key] {
+        case let n as NSNumber: return n.doubleValue
+        case let d as Double: return d
+        case let i as Int: return Double(i)
+        default: return nil
+        }
+    }
 }
 
 // MARK: - filesystem

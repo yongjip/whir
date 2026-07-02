@@ -17,10 +17,11 @@ public struct UsageEngine {
     public func refresh(window: Window,
                         claudeProjects: String = homePath(".claude/projects"),
                         codexSessions: String? = nil) -> UsageReport {
+        let pricingAsOf = Pricing.asOf   // capture at start; see ScanCache.save
         var aggs = ScanCache.load(window: window) ?? [:]
         ClaudeAdapter(root: claudeProjects).update(&aggs, window: window)
         CodexAdapter(root: codexSessions).update(&aggs, window: window)
-        ScanCache.save(aggs, window: window)
+        ScanCache.save(aggs, window: window, pricingAsOf: pricingAsOf)
         return UsageReport.build(from: aggs)
     }
 }

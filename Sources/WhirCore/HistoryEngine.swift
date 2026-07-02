@@ -14,9 +14,10 @@ enum HistoryCache {
         else { return nil }
         return f.aggs
     }
-    static func save(_ aggs: [String: HourAgg]) {
+    /// `pricingAsOf` is captured at scan start — see ScanCache.save for why.
+    static func save(_ aggs: [String: HourAgg], pricingAsOf: String) {
         try? FileManager.default.createDirectory(atPath: ScanCache.directory(), withIntermediateDirectories: true)
-        guard let data = try? JSONEncoder().encode(File(version: version, pricingAsOf: Pricing.asOf, aggs: aggs)) else { return }
+        guard let data = try? JSONEncoder().encode(File(version: version, pricingAsOf: pricingAsOf, aggs: aggs)) else { return }
         try? data.write(to: URL(fileURLWithPath: path()), options: .atomic)
     }
 }
@@ -49,11 +50,12 @@ public struct HistoryEngine {
     @discardableResult
     public func refresh(claudeProjects: String = homePath(".claude/projects"),
                         codexSessions: String? = nil) -> HistorySnapshot {
+        let pricingAsOf = Pricing.asOf   // capture at start; see ScanCache.save
         var aggs = HistoryCache.load() ?? [:]
         let keyer = HourKeyer()
         ClaudeHistory.update(&aggs, root: claudeProjects, keyer: keyer)
         CodexHistory.update(&aggs, root: codexSessions ?? codexRoot(), keyer: keyer)
-        HistoryCache.save(aggs)
+        HistoryCache.save(aggs, pricingAsOf: pricingAsOf)
         return HistorySnapshot(aggs: aggs)
     }
 }

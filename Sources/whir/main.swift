@@ -8,6 +8,10 @@ func flagValue(_ name: String) -> String? {
     return args[i + 1]
 }
 
+// Adopt the app-fetched price table when it's newer than the built-in one.
+// The CLI itself never touches the network — this only reads a local file.
+Pricing.loadOverride()
+
 if args.contains("-h") || args.contains("--help") {
     print("""
     usage: whir [--month YYYY-MM | --all]
@@ -49,14 +53,17 @@ if args.contains("--history") {
         func header(_ name: String) {
             print("  \(lj(name, 28))\(rj("Input", 9))\(rj("Cache", 9))\(rj("Output", 9))\(rj("Total", 9))\(rj("Cost", 11))")
         }
-        func row(_ name: String, _ t: ModelTokens, _ c: Double) {
-            print("  \(lj(name, 28))\(rj(tkf(t.input), 9))\(rj(tkf(t.cacheAll), 9))\(rj(tkf(t.output), 9))\(rj(tkf(t.total), 9))\(rj(String(format: "$%.2f", c), 11))")
+        func row(_ name: String, _ t: ModelTokens, _ c: String) {
+            print("  \(lj(name, 28))\(rj(tkf(t.input), 9))\(rj(tkf(t.cacheAll), 9))\(rj(tkf(t.output), 9))\(rj(tkf(t.total), 9))\(rj(c, 11))")
         }
         print("================ \(key) — drilldown (\(g.rawValue)) ================")
         print("By model:"); header("model")
-        for m in d.models { row("\(m.model) \(m.provider == .codex ? "(X)" : "(C)")", m.tokens, m.cost) }
+        for m in d.models {
+            row("\(m.model) \(m.provider == .codex ? "(X)" : "(C)")", m.tokens,
+                m.priced ? String(format: "$%.2f", m.cost) : "—")   // no price row ≠ free
+        }
         print("By project:"); header("project")
-        for p in d.projects { row(p.project, p.tokens, p.cost) }
+        for p in d.projects { row(p.project, p.tokens, String(format: "$%.2f", p.cost)) }
         print("  total: \(money(d.total))")
         exit(0)
     }
