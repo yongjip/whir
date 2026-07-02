@@ -26,7 +26,7 @@
   <a class="back" href="../">← Whir</a>
   <h1>Support</h1>
 
-  <p>Whir shows the API-equivalent cost of your local Claude Code and Codex usage, in your Mac menu bar. Everything is computed on your machine — no account, no network.</p>
+  <p>Whir shows the API-equivalent cost of your local Claude Code and Codex usage, in your Mac menu bar. Everything is computed on your machine — no account, nothing uploaded (the only network request is an optional daily refresh of its price table).</p>
 
   <h2>The menu-bar number is $0 / looks empty</h2>
   <p>The headline is <strong>today's</strong> spend, so it starts at $0 each morning and grows as you use Claude Code / Codex. Open the popover to see your last-30-days value and the per-provider breakdown.</p>
@@ -35,7 +35,7 @@
   <p>Whir reads <code>~/.claude/projects</code> and <code>~/.codex/sessions</code>. If you haven't used those tools yet, or installed them elsewhere, there's nothing to read. In the Mac App Store build, grant access to each folder once when prompted (press <code>⇧⌘.</code> to reveal hidden folders in the picker).</p>
 
   <h2>The numbers are estimates</h2>
-  <p>Whir multiplies token counts by published API prices (stamped with an "as of" date). Subscription quotas aren't token-denominated, so this is <em>usage value</em>, not your actual bill.</p>
+  <p>Whir multiplies token counts by published API prices (stamped with an "as of" date, refreshed daily from GitHub unless you turn that off). Subscription quotas aren't token-denominated, so this is <em>usage value</em>, not your actual bill. A model missing from the price table shows <code>—</code> instead of a cost.</p>
 
   <h2>Launch at login</h2>
   <p>Toggle it in the settings window (gear icon). If macOS shows it as needing approval, enable Whir under <strong>System Settings → General → Login Items</strong>.</p>

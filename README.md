@@ -2,7 +2,7 @@
 
 **What your AI coding habit actually costs — one clean number in your Mac menu bar, computed entirely on your machine, without touching a single credential.**
 
-Whir reads the local usage logs that Claude Code and Codex already write, and shows the API-equivalent **usage value** of what you ran — live in the menu bar, with history and a system monitor. Local-first: it never reads your keychain, never sees prompts or code, and makes no network calls.
+Whir reads the local usage logs that Claude Code and Codex already write, and shows the API-equivalent **usage value** of what you ran — live in the menu bar, with history and a system monitor. Local-first: it never reads your keychain, never sees prompts or code, and never uploads anything — its only network request is an optional once-a-day download of its own price table.
 
 ## Features
 - **Menu bar** — today's estimated usage value at a glance; click for a Claude/Codex breakdown and last-30-day ROI.
@@ -10,7 +10,7 @@ Whir reads the local usage logs that Claude Code and Codex already write, and sh
 - **ROI** — enter your monthly subscription and see *"N× your $X/mo"* — value vs. what you actually pay.
 - **System monitor** — live **CPU / RAM / disk**, RunCat-style.
 - **Shortcuts / Spotlight** — an App Intent returns today's usage value for automations (reads the local cache; no folder access needed).
-- **Private by design** — read-only on `~/.claude` & `~/.codex` metadata; no keychain, no network, no prompt/code upload.
+- **Private by design** — read-only on `~/.claude` & `~/.codex` metadata; no keychain, no prompt/code upload; the only network request is an optional daily price-table refresh (off-switchable in Settings).
 
 ## Privacy
 Whir reads only token counts, model names, timestamps, and project paths. It never reads prompt text, generated code, tool output, auth tokens, or `~/.codex/auth.json`. Nothing is uploaded; there is no account and no server. (The direct build reads the folders directly; the Mac App Store build asks you to grant `~/.claude` / `~/.codex` once.)
@@ -45,7 +45,8 @@ First run is a full scan; an incremental cache (per-file byte-offset cursors) ma
 ### Cost model
 - **Claude:** `input + output + cache_read×0.1 + cache_write_5m×1.25 + cache_write_1h×2` (× input price).
 - **Codex:** `(input − cached)×input_price + cached×cached_price + output×output_price` (reasoning is within output).
-- Prices are **estimates**, stamped with `Pricing.asOf`; subscription quotas aren't token-denominated, so this is *usage value*, not your bill. Tiers marked `*` (mini/spark) are rough.
+- Prices are **estimates**, stamped with `Pricing.asOf`; subscription quotas aren't token-denominated, so this is *usage value*, not your bill. Tiers marked `*` (mini/spark) are rough; models missing from the price table show `—`, not $0.
+- The price table ships in the app and is refreshed daily from [`pricing.json`](pricing.json) in this repo (the app's only network request; opt out in Settings). That file is itself kept current from [LiteLLM's community price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json) by a scheduled GitHub Action (`scripts/sync_pricing.py`), so newly released models get priced without an app update.
 
 ### Layout
 ```

@@ -1,0 +1,31 @@
+# Keeps pricing.json in sync with LiteLLM's community price table.
+# The app fetches pricing.json from this repo daily (its only network call),
+# so a commit here reaches every install within ~a day — no release needed.
+name: Sync pricing from LiteLLM
+
+on:
+  schedule:
+    - cron: "17 3 * * *"   # daily, off the top of the hour
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync price table
+        run: python3 scripts/sync_pricing.py   # exits nonzero on sanity failures — surfaces as a red run
+      - name: Commit if changed
+        run: |
+          if git diff --quiet pricing.json; then
+            echo "no change"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pricing.json
+          git commit -m "Sync pricing.json from LiteLLM ($(date -u +%F))"
+          git push
