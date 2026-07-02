@@ -9,9 +9,13 @@ file, so Claude Code and Codex read the same guide.
 
 These are the product. A change that breaks one is wrong, no matter how useful:
 
-- **No network.** The core makes zero network calls. No telemetry, no update
-  ping, no "phone home." (`INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO`
-  depends on this staying true.)
+- **Network: the price table only.** `WhirCore` and the `whir` CLI make zero
+  network calls. The app makes exactly one kind: `PricingUpdater` fetches
+  `pricing.json` from this repo (raw.githubusercontent.com) at most daily —
+  off-switchable in Settings, cached to Application Support, and the request
+  carries no user or usage data. No telemetry, no update ping, no "phone home,"
+  and no other endpoint, ever. (`ITSAppUsesNonExemptEncryption = NO` holds
+  because that fetch uses only Apple's TLS — exempt encryption.)
 - **No credentials, no keychain.** Never read the keychain, OAuth tokens, or
   `~/.codex/auth.json`. The trust story is "we structurally can't leak secrets."
 - **Read-only, metadata only.** Read token counts, model names, timestamps, and
@@ -78,6 +82,15 @@ Everything is named `Whir*`: the `WhirCore` library, the `WhirApp` target, the
   aren't token-denominated, so the headline is *usage value*, not a bill —
   label it honestly. `costByProject`/`ProjectAgg` store cost at scan-time
   pricing, so the caches invalidate on a `Pricing.asOf` change (intentional).
+  The active table is the compiled-in one unless a **newer** local
+  `pricing.json` override exists (fetched by the app from the repo root). That
+  repo-root file is auto-synced from LiteLLM's community price table by CI
+  (`scripts/sync_pricing.py` + `.github/workflows/sync-pricing.yml`) — edit the
+  script, not the JSON; a test enforces the file stays parseable and covers the
+  built-in model families. Engines capture `asOf` at scan start and stamp
+  caches with it, so a mid-scan price update can't persist mixed-price
+  aggregates. A model missing from the table is `priced == false` — render it
+  as "—", never as $0.00.
 - **Defensive JSON.** Logs vary by tool version; parse with the tolerant
   `obj.str/dict/int` helpers and skip records that don't match, never assume a
   shape.
@@ -103,5 +116,6 @@ Everything is named `Whir*`: the `WhirCore` library, the `WhirApp` target, the
 - **Don't commit or push unless asked.** When you do, keep commits small and
   scoped; never commit `.idea/`, `.build/`, or the generated `Whir.xcodeproj`.
 - Prefer editing existing files over adding new ones; don't introduce a
-  dependency, a network call, or a credential read to "make it easier."
+  dependency, a new network call (the price-table fetch is the only one), or a
+  credential read to "make it easier."
 - Sentence case for user-facing strings; no emoji in the UI.

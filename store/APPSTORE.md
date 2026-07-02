@@ -2,8 +2,10 @@
 
 This app is sandbox-ready: it reads only the token-count metadata in
 `~/.claude` and `~/.codex`, via folders the user grants once (security-scoped
-bookmarks), and makes no network calls. The same source builds as the
-direct/notarized app (sandbox code no-ops when not sandboxed).
+bookmarks). Its only network call is a once-a-day download of its public price
+table from GitHub (no user data sent; off-switchable in Settings). The same
+source builds as the direct/notarized app (sandbox code no-ops when not
+sandboxed).
 
 ## What's already done (in the repo)
 - `Whir.entitlements` — App Sandbox + user-selected read-only.
@@ -43,14 +45,17 @@ direct/notarized app (sandbox code no-ops when not sandboxed).
 
 ## Privacy nutrition label
 - **Data collected: none.** Reads local log files read-only; nothing leaves the
-  device; no analytics, no network. (Declare "Data Not Collected".)
+  device; no analytics. The only network request is a daily price-table
+  download that carries no user data, so "Data Not Collected" still applies.
 
 ## App Review notes (paste into the review form)
 > Whir is a menu-bar utility that estimates the API-equivalent cost of
 > the reviewer's local AI-coding usage. On first launch it asks the user to grant
 > read-only access to two hidden folders, `~/.claude` and `~/.codex` (press
 > Shift-Cmd-Period in the open panel to reveal hidden folders). It reads only
-> token counts/timestamps/model names there; it makes no network connections.
+> token counts/timestamps/model names there. Its only network connection is a
+> once-daily HTTPS GET of a public price table (pricing.json) from GitHub —
+> nothing about the user is sent, and it can be disabled in Settings.
 > To test without those folders, create `~/.codex/sessions/2026/01/01/rollout-test.jsonl`
 > with a `token_count` line, or grant any folder — the UI will show "$0 / no usage".
 

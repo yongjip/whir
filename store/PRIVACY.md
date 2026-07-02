@@ -1,6 +1,6 @@
 # Whir — Privacy Policy
 
-_Last updated: 2026-07-01_
+_Last updated: 2026-07-02_
 
 Whir is a macOS menu-bar app that estimates the API-equivalent **usage value** of
 your local AI coding activity (Claude Code and Codex). It is designed to be
@@ -21,7 +21,12 @@ tokens (e.g. it never reads `~/.codex/auth.json`).
 ## What Whir does NOT do
 
 - **No data collection.** Whir has no account, no server, and no analytics.
-- **No network.** Whir makes no network connections. Nothing leaves your Mac.
+- **No uploads.** Nothing about you or your usage ever leaves your Mac. Whir's
+  only network activity is an optional once-a-day **download** of its model
+  price table (`pricing.json`) from GitHub, so cost estimates stay current. The
+  request carries no personal or usage data — it is a plain file download
+  (GitHub sees your IP address, as with any download). You can turn it off in
+  Settings; Whir then works fully offline with its built-in prices.
 - **No keychain / credential access.** Whir never reads the macOS keychain or any
   stored credentials.
 - **No third parties.** No data is shared with anyone, because no data is
