@@ -51,13 +51,37 @@ sandboxed).
 ## App Review notes (paste into the review form)
 > Whir is a menu-bar utility that estimates the API-equivalent cost of
 > the reviewer's local AI-coding usage. On first launch it asks the user to grant
-> read-only access to two hidden folders, `~/.claude` and `~/.codex` (press
-> Shift-Cmd-Period in the open panel to reveal hidden folders). It reads only
-> token counts/timestamps/model names there. Its only network connection is a
+> read-only access to two hidden folders, `~/.claude` and `~/.codex`. Each picker
+> opens directly inside the target folder, so clicking "Grant" once is enough;
+> connecting only one of the two folders is also fine. Whir reads only token
+> counts, timestamps, and model names there. Its only network connection is a
 > once-daily HTTPS GET of a public price table (pricing.json) from GitHub —
 > nothing about the user is sent, and it can be disabled in Settings.
-> To test without those folders, create `~/.codex/sessions/2026/01/01/rollout-test.jsonl`
-> with a `token_count` line, or grant any folder — the UI will show "$0 / no usage".
+>
+> To test with sample data, create
+> `~/.codex/sessions/2026/01/01/rollout-test.jsonl` containing these two lines:
+>   {"type":"turn_context","payload":{"type":"turn_context","model":"gpt-5.5"}}
+>   {"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":100000,"cached_input_tokens":0,"output_tokens":20000}}}}
+> then grant `~/.codex` — the popover shows a real dollar estimate (gpt-5.5 is a
+> priced model). If a folder other than ~/.claude/~/.codex is chosen, Whir warns
+> and offers to choose again; an empty or unreadable folder shows "No logs found"
+> with a re-grant button — never a silent $0.
+
+## What's New — paste into ASC for each update
+
+**v0.2.0 (build 5):**
+> - Fixed setup: the folder picker now opens on the right folder and checks your
+>   choice, so access can't land on the wrong place and read $0. Re-grant any
+>   time from Settings, and connecting just one of Claude Code / Codex is enough.
+> - Much faster first scan; lower memory use.
+> - Model prices now refresh automatically (once a day, optional, off-switchable;
+>   no usage data is sent).
+> - New Shortcuts action: "Get today's AI usage."
+> - Clearer loading and empty states.
+
+The v1.1 update adds the app's first network use (the daily price-table GET). The
+privacy label stays **Data Not Collected** and the export-compliance answer stays
+`ITSAppUsesNonExemptEncryption = NO` (Apple-TLS-only, exempt) — both unchanged.
 
 ## Still needed before submission (only you can do)
 - **Screenshots** (App Store requires ≥1; up to 10): capture the menu-bar
@@ -73,6 +97,6 @@ sandboxed).
   path; the review notes above explain it. Do not request Full Disk Access.
 
 ## Alternative (recommended primary): direct notarized + Homebrew
-See `store/DIRECT.md` (todo) — Developer ID signing + `notarytool` + Homebrew
-cask. No sandbox onboarding, instant folder reads. Lower friction; this is what
-comparable tools ship.
+See `store/DIRECT.md` — Developer ID signing + `notarytool` + Homebrew cask. No
+sandbox onboarding, instant folder reads. Lower friction; this is what comparable
+tools ship.

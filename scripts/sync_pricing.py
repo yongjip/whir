@@ -123,13 +123,28 @@ def main():
             print(f"  warn: {prefix}: no upstream prices and no current row — skipped")
 
     # ---- sanity band vs the committed file (estimates are exempt) ----
+    # A brand-new prefix has no exact committed counterpart, so band-check it
+    # against its longest committed FAMILY prefix (the app matches longest-prefix
+    # too). This catches a unit-typo'd LiteLLM price (e.g. 1000x) on a newly
+    # auto-discovered dated Claude model, which would otherwise auto-ship.
+    committed = {**cur_claude, **cur_openai}
+    def family(prefix):
+        best = None
+        for p, r in committed.items():
+            if prefix.startswith(p) and not r.get("estimate") and (best is None or len(p) > len(best[0])):
+                best = (p, r)
+        return best[1] if best else None
     for prefix, row in list(claude.items()) + list(openai.items()):
-        old = cur_claude.get(prefix) or cur_openai.get(prefix)
-        if not old or old.get("estimate"):
+        old = committed.get(prefix)
+        via = "prior"
+        if old is None or old.get("estimate"):
+            old, via = family(prefix), "family"
+        if not old:
+            print(f"  warn: {prefix}: new prefix with no committed family — can't sanity-check, admitting")
             continue
         for f in ("input", "output"):
             if not (1 / MAX_RATIO <= row[f] / old[f] <= MAX_RATIO):
-                sys.exit(f"error: {prefix} {f} moved {old[f]} -> {row[f]} (>{MAX_RATIO}x) — review manually")
+                sys.exit(f"error: {prefix} {f} = {row[f]} vs {via} {old[f]} (>{MAX_RATIO}x) — review manually")
 
     new_claude = sorted(claude.values(), key=lambda r: r["prefix"])
     new_openai = [openai[p] for p, _ in OPENAI_ROWS if p in openai]
