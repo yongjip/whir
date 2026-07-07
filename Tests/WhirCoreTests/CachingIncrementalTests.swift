@@ -154,4 +154,73 @@ final class CachingIncrementalTests: XCTestCase {
         XCTAssertNil(inc.values.first(where: { $0.buckets.values.contains { $0.models["unknown"] != nil } }),
                      "model must carry across the resume boundary in the history path too")
     }
+
+    // A scan that catches a fork mid-replay (parent history not fully flushed
+    // yet) must not advance the cursor — else the rest of the replay is counted
+    // as real usage on the next scan (ccusage #897 class of double-count).
+    func testForkMidReplayNotDoubleCounted() {
+        let root = tmpDir(); defer { try? FileManager.default.removeItem(atPath: root) }
+        let pDir = root + "/2026/06/15"; mkdir(pDir)
+        let fDir = root + "/2026/06/16"; mkdir(fDir)
+        let parent = pDir + "/rollout-2026-06-15-parentaaa.jsonl"
+        let fork = fDir + "/rollout-2026-06-16-forkbbbb.jsonl"
+        // parent: three turns → 600/150/60
+        write(meta("parentaaa") + ctx("gpt-5.5")
+              + tok("2026-06-15T00:00:02Z", 100, 50, 10)
+              + tok("2026-06-15T00:00:03Z", 200, 100, 20)
+              + tok("2026-06-15T00:00:04Z", 300, 0, 30), to: parent)
+        // fork so far replayed ONLY the first parent event (mid-replay)
+        write(meta("forkbbbb", forkedFrom: "parentaaa") + ctx("gpt-5.5")
+              + tok("2026-06-16T00:00:00.1Z", 100, 50, 10), to: fork)
+
+        var inc: [String: FileAgg] = [:]
+        let ad = CodexAdapter(root: root)
+        ad.update(&inc, window: .all)                      // parent counted; fork left at 0 (mid-replay)
+        XCTAssertEqual(sumFiles(inc).0, 600, "only the parent should count while the fork is mid-replay")
+
+        // Codex flushes the rest of the replay + one genuinely new turn.
+        append(tok("2026-06-16T00:00:00.2Z", 200, 100, 20)
+             + tok("2026-06-16T00:00:00.3Z", 300, 0, 30)
+             + tok("2026-06-16T00:00:05Z", 500, 0, 50), to: fork)
+        ad.update(&inc, window: .all)
+
+        var full: [String: FileAgg] = [:]
+        CodexAdapter(root: root).update(&full, window: .all)
+
+        // parent 600/150/60 + fork's ONE new turn 500/0/50 = 1100/150/110
+        XCTAssertEqual(sumFiles(inc).0, 1100, "1600 would mean the mid-replay remainder was double-counted")
+        XCTAssertEqual(sumFiles(inc).1, 150)
+        XCTAssertEqual(sumFiles(inc).2, 110)
+        XCTAssertEqual(sumFiles(inc).0, sumFiles(full).0, "incremental must equal a full scan")
+    }
+
+    // A granted root that becomes unreadable (moved / access lost) must NOT wipe
+    // the cached aggregates — that would force a multi-GB rescan on recovery.
+    func testUnreadableRootPreservesCache() {
+        let root = tmpDir()
+        let dir = root + "/2026/06/15"; mkdir(dir)
+        write(ctx("gpt-5.5") + tok("2026-06-15T00:00:02Z", 1000, 200, 50),
+              to: dir + "/rollout-2026-06-15-aaa.jsonl")
+        var aggs: [String: FileAgg] = [:]
+        let ad = CodexAdapter(root: root)
+        ad.update(&aggs, window: .all)
+        XCTAssertEqual(sumFiles(aggs).0, 1000)
+
+        try? FileManager.default.removeItem(atPath: root)   // root now unreadable
+        ad.update(&aggs, window: .all)
+        XCTAssertEqual(sumFiles(aggs).0, 1000, "unreadable root must preserve the cache, not wipe it")
+
+        // Same guarantee on the single-root Claude path.
+        let croot = tmpDir()
+        let proj = croot + "/proj"; mkdir(proj)
+        write(claude("2026-06-15T01:00:00Z", req: "r1", model: "claude-opus-4-8", input: 100, output: 50),
+              to: proj + "/a.jsonl")
+        var cggs: [String: FileAgg] = [:]
+        let cad = ClaudeAdapter(root: croot)
+        cad.update(&cggs, window: .all)
+        XCTAssertEqual(sumFiles(cggs).0, 100)
+        try? FileManager.default.removeItem(atPath: croot)
+        cad.update(&cggs, window: .all)
+        XCTAssertEqual(sumFiles(cggs).0, 100, "unreadable Claude root must preserve the cache")
+    }
 }

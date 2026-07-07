@@ -22,7 +22,7 @@ enum CodexFork {
     static func parentTokenSeq(forkedFromId id: String, roots: [String]) -> [[Int]]? {
         var parentPath: String?
         for r in roots {
-            if let p = files(under: r, suffix: ".jsonl").first(where: { $0.contains(id) }) {
+            if let p = files(under: r, suffix: ".jsonl")?.first(where: { $0.contains(id) }) {
                 parentPath = p; break
             }
         }
@@ -63,4 +63,11 @@ struct CodexPrefixSkipper {
         active = false
         return false
     }
+
+    /// Still consuming the inherited replay — a scan caught the fork mid-replay
+    /// (Codex hadn't flushed all replayed events yet). The caller must NOT
+    /// advance the file cursor then: re-read from 0 next time with a fresh
+    /// skipper. Nothing new was counted (we never diverged), so the re-read is
+    /// free — and it stops the remaining replay from being counted as real usage.
+    var stillSkipping: Bool { active && idx < parent.count }
 }
