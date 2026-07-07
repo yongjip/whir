@@ -30,6 +30,7 @@ final class HistoryModel {
     @ObservationIgnored private var snapshot: HistorySnapshot?
     @ObservationIgnored private var started = false
     @ObservationIgnored private var scanTask: Task<Void, Never>?   // in-flight scan; nil = idle
+    @ObservationIgnored private var refreshQueued = false          // request landed mid-scan → run after
     @ObservationIgnored private var autoTimer: Timer?
     @ObservationIgnored private let palette: [Color] = [.orange, .blue, .teal, .purple, .pink, .green, .indigo]
 
@@ -55,10 +56,11 @@ final class HistoryModel {
     func setGranularity(_ g: Granularity) { granularity = g; selectedKey = nil; recompute() }
     func setGroupBy(_ b: GroupBy) { groupBy = b; selectedKey = nil; recompute() }
 
-    /// Coalesced: a no-op while a scan is in flight, so overlapping refreshes
-    /// can't clobber the history.json byte offsets.
+    /// Coalesced: overlapping refreshes can't clobber the history.json byte
+    /// offsets. A request that lands mid-scan runs once the scan finishes —
+    /// a re-granted folder must take effect now, not at the next auto-refresh.
     func refresh() {
-        guard scanTask == nil else { return }
+        guard scanTask == nil else { refreshQueued = true; return }
         building = true
         scanTask = Task.detached(priority: .userInitiated) {
             let roots = FolderAccess.currentRoots()
@@ -70,6 +72,7 @@ final class HistoryModel {
                 self.snapshot = s; self.hasReadableRoot = status.anyReadable
                 self.recompute(); self.loading = false; self.building = false
                 self.scanTask = nil
+                if self.refreshQueued { self.refreshQueued = false; self.refresh() }
             }
         }
     }
