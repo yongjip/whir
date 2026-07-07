@@ -22,7 +22,10 @@ final class HistoryModel {
     /// Independent of the granularity picker. nil until first built.
     struct Headline: Equatable { let today: Double; let codex: Double; let claude: Double; let last30: Double }
     private(set) var headline: Headline?
-    var hasReadableRoot = true
+    /// Per-provider root readability (for "connect this tool" hints); readable
+    /// means the folder resolves and can be listed, not that it has logs.
+    private(set) var roots = RootsStatus(claudeReadable: true, codexReadable: true)
+    var hasReadableRoot: Bool { roots.anyReadable }
 
     // Non-UI internals — excluded from observation. `snapshot` always mutates
     // alongside a tracked property (points/headline/loading), so views still update.
@@ -69,7 +72,7 @@ final class HistoryModel {
                  rootsStatus(claudeProjects: roots.claudeProjects, codexSessions: roots.codexSessions))
             }
             await MainActor.run {
-                self.snapshot = s; self.hasReadableRoot = status.anyReadable
+                self.snapshot = s; self.roots = status
                 self.recompute(); self.loading = false; self.building = false
                 self.scanTask = nil
                 if self.refreshQueued { self.refreshQueued = false; self.refresh() }

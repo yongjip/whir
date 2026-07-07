@@ -38,7 +38,9 @@ struct WhirApp: App {
 
         // A real Window (not a sheet/popover) so its TextFields keep focus —
         // the menu-bar popover panel dismisses the instant a field is clicked.
-        Window("Subscriptions", id: "settings") {
+        // Titled "Settings" (not "Subscriptions") — it now also holds launch-at-
+        // login, the price-update network switch, and folder-access re-grant.
+        Window("Settings", id: "settings") {
             SubscriptionSettings()
         }
         .windowResizability(.contentSize)

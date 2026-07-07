@@ -62,14 +62,17 @@ struct HistoryView: View {
     }
 
     private var legendView: some View {
-        HStack(spacing: 12) {
-            ForEach(model.legend) { g in
-                HStack(spacing: 4) {
-                    Circle().fill(g.color).frame(width: 7, height: 7)
-                    Text(g.name).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+        // Horizontal scroll + fixedSize so long model names (by-model grouping)
+        // show in full instead of compressing to identical truncated stubs.
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(model.legend) { g in
+                    HStack(spacing: 4) {
+                        Circle().fill(g.color).frame(width: 7, height: 7)
+                        Text(g.name).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                    }
                 }
             }
-            Spacer()
         }
     }
 

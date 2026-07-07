@@ -22,6 +22,8 @@ final class UsageModel {
     var loading: Bool { h.headline == nil && (h.loading || h.building) }
     var refreshing: Bool { h.building }
     var hasReadableRoot: Bool { h.hasReadableRoot }
+    var claudeReadable: Bool { h.roots.claudeReadable }
+    var codexReadable: Bool { h.roots.codexReadable }
     var total: Double { h.headline?.today ?? 0 }        // today's spend (the headline number)
     var last30: Double { h.headline?.last30 ?? 0 }      // last-30-days value, for the ROI line
 
