@@ -18,9 +18,10 @@ enum FolderAccess {
     private static func key(_ id: String) -> String { "folderBookmark.\(id)" }
     static func hasBookmark(_ id: String) -> Bool { UserDefaults.standard.data(forKey: key(id)) != nil }
 
-    /// In the sandbox we need both folders granted before we can read anything.
+    /// One granted folder is enough to start — not everyone uses both tools.
+    /// The popover offers the missing grant afterwards.
     static var needsOnboarding: Bool {
-        isSandboxed && (!hasBookmark(claudeID) || !hasBookmark(codexID))
+        isSandboxed && !hasBookmark(claudeID) && !hasBookmark(codexID)
     }
 
     struct Roots { let claudeProjects: String; let codexSessions: String? }
@@ -74,16 +75,32 @@ enum FolderAccess {
         UserDefaults.standard.set(data, forKey: key(id))
     }
 
-    /// Show a folder picker (hidden files revealed) and persist the grant.
-    @MainActor static func grant(id: String) {
+    /// Show a folder picker pre-navigated to the target hidden folder and
+    /// persist the grant. Returns whether a grant was saved.
+    @MainActor @discardableResult static func grant(id: String) -> Bool {
+        let name = id == claudeID ? ".claude" : ".codex"
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.showsHiddenFiles = true
-        panel.prompt = "Grant access"
-        panel.message = "Select your \(id == claudeID ? "~/.claude" : "~/.codex") folder. "
-            + "Press \u{21E7}\u{2318}. (Shift-Cmd-Period) to show hidden folders."
-        if panel.runModal() == .OK, let url = panel.url { save(url: url, id: id) }
+        // Open inside the target folder — the default "Grant" click selects it,
+        // no hidden-folder hunting.
+        panel.directoryURL = URL(fileURLWithPath: homePath(name), isDirectory: true)
+        panel.prompt = "Grant"
+        panel.message = "Grant read-only access to ~/\(name) — it's already open here, just click Grant."
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        // A wrong folder is invisible later (everything just reads $0), so
+        // sanity-check the pick and offer a redo.
+        if url.lastPathComponent != name {
+            let alert = NSAlert()
+            alert.messageText = "That doesn't look like ~/\(name)"
+            alert.informativeText = "Whir would find no usage in \u{201C}\(url.lastPathComponent)\u{201D}. Use it anyway?"
+            alert.addButton(withTitle: "Choose again")
+            alert.addButton(withTitle: "Use this folder")
+            if alert.runModal() == .alertFirstButtonReturn { return grant(id: id) }
+        }
+        save(url: url, id: id)
+        return true
     }
 }
