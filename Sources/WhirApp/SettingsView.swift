@@ -45,8 +45,9 @@ struct SubscriptionSettings: View {
             Toggle("Update model prices automatically", isOn: $autoUpdatePricing)
                 .font(.system(size: 13))
                 .onChange(of: autoUpdatePricing) { _, on in
-                    // Fetch right away on opt-in instead of waiting for the daily timer.
-                    if on { Task { @MainActor in PricingUpdater.shared.refreshNow() } }
+                    // Fetch right away on opt-in (bypass the daily throttle) instead
+                    // of waiting for the timer.
+                    if on { Task { @MainActor in PricingUpdater.shared.refreshNow(force: true) } }
                 }
             Text("Once a day, Whir downloads its price table (pricing.json) from GitHub — its only network request. Nothing about you or your usage is sent.")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
