@@ -52,6 +52,22 @@ struct SubscriptionSettings: View {
                 .font(.system(size: 11)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            // Recovery path for a grant that points at the wrong folder — the
+            // onboarding view never reappears once bookmarks exist.
+            if FolderAccess.isSandboxed {
+                Divider().padding(.vertical, 2)
+                Text("Folder access").font(.system(size: 13, weight: .medium))
+                HStack(spacing: 8) {
+                    Button("Re-grant ~/.claude…") {
+                        if FolderAccess.grant(id: FolderAccess.claudeID) { HistoryModel.shared.refresh() }
+                    }
+                    Button("Re-grant ~/.codex…") {
+                        if FolderAccess.grant(id: FolderAccess.codexID) { HistoryModel.shared.refresh() }
+                    }
+                }
+                .font(.system(size: 12))
+            }
+
             HStack { Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.defaultAction) }
         }
         .padding(20)
