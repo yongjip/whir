@@ -102,7 +102,8 @@ private func add(_ agg: inout HourAgg, hour: String, provider: Provider, model: 
 
 enum ClaudeHistory {
     static func update(_ aggs: inout [String: HourAgg], root: String, keyer: HourKeyer) {
-        let present = Set(files(under: root, suffix: ".jsonl"))
+        guard let found = files(under: root, suffix: ".jsonl") else { return }   // unreadable → keep cache
+        let present = Set(found)
         for (path, a) in aggs where a.provider == .claude && !present.contains(path) { aggs[path] = nil }
         for path in present {
             guard let id = fileIdentity(path) else { continue }
@@ -116,16 +117,18 @@ enum ClaudeHistory {
             while let raw = reader.nextRaw() {
                 if !raw.terminated { continue }
                 if !raw.contains(LineNeedle.assistant) { continue }
-                guard let obj = jsonObject(raw.string), obj.str("type") == "assistant" else { continue }
-                if let rid = obj.str("requestId") {
-                    if fa!.seenRequestIDs.contains(rid) { continue }
-                    fa!.seenRequestIDs.insert(rid)
+                autoreleasepool {
+                    guard let obj = jsonObject(raw.string), obj.str("type") == "assistant" else { return }
+                    if let rid = obj.str("requestId") {
+                        if fa!.seenRequestIDs.contains(rid) { return }
+                        fa!.seenRequestIDs.insert(rid)
+                    }
+                    guard let message = obj.dict("message"), let usage = message.dict("usage") else { return }
+                    let model = message.str("model") ?? "unknown"
+                    if Pricing.excludedModels.contains(model) { return }
+                    add(&fa!, hour: keyer.key(obj.str("timestamp")), provider: .claude, model: model,
+                        project: projectName(obj.str("cwd")), tokens: claudeTokens(usage))
                 }
-                guard let message = obj.dict("message"), let usage = message.dict("usage") else { continue }
-                let model = message.str("model") ?? "unknown"
-                if Pricing.excludedModels.contains(model) { continue }
-                add(&fa!, hour: keyer.key(obj.str("timestamp")), provider: .claude, model: model,
-                    project: projectName(obj.str("cwd")), tokens: claudeTokens(usage))
             }
             fa!.offset = reader.safeOffset; fa!.mtime = id.mtime
             aggs[path] = fa
@@ -139,8 +142,14 @@ enum CodexHistory {
         let archived = (root as NSString).deletingLastPathComponent + "/archived_sessions"
         if FileManager.default.fileExists(atPath: archived) { roots.append(archived) }
         var present = Set<String>()
-        for r in roots { for p in files(under: r, suffix: ".jsonl") { present.insert(p) } }
-        for (path, a) in aggs where a.provider == .codex && !present.contains(path) { aggs[path] = nil }
+        var allReadable = true
+        for r in roots {
+            guard let found = files(under: r, suffix: ".jsonl") else { allReadable = false; continue }
+            for p in found { present.insert(p) }
+        }
+        if allReadable {   // unreadable root → keep cache instead of wiping it
+            for (path, a) in aggs where a.provider == .codex && !present.contains(path) { aggs[path] = nil }
+        }
 
         for path in present {
             guard let id = fileIdentity(path) else { continue }
@@ -160,28 +169,32 @@ enum CodexHistory {
                 let isCtx = raw.contains(LineNeedle.turnContext)
                 let isTok = raw.contains(LineNeedle.tokenCount)
                 if !isCtx && !isTok { continue }
-                guard let obj = jsonObject(raw.string) else { continue }
-                if obj.str("type") == "turn_context" {
-                    let p = obj.dict("payload")
-                    if let m = p?.str("model") { curModel = m }
-                    if let c = p?.str("cwd") { curProject = projectName(c) }
-                    continue
+                autoreleasepool {
+                    guard let obj = jsonObject(raw.string) else { return }
+                    if obj.str("type") == "turn_context" {
+                        let p = obj.dict("payload")
+                        if let m = p?.str("model") { curModel = m }
+                        if let c = p?.str("cwd") { curProject = projectName(c) }
+                        return
+                    }
+                    guard let payload = obj.dict("payload"), payload.str("type") == "token_count",
+                          let last = payload.dict("info")?.dict("last_token_usage") else { return }
+                    let tup = [last.int("input_tokens"), last.int("cached_input_tokens"), last.int("output_tokens")]
+                    if skipper?.shouldSkip(tup) == true { return }   // inherited fork replay — counted in the parent
+                    let total = payload.dict("info")?.dict("total_token_usage")
+                    let fp = "\(obj.str("timestamp") ?? "")|\(tup[0])|\(tup[1])|\(tup[2])|\(total?.int("input_tokens") ?? -1)|\(total?.int("output_tokens") ?? -1)"
+                    if fp == lastFP { return }   // consecutive duplicate token_count snapshot
+                    lastFP = fp
+                    let model = curModel ?? "unknown"
+                    if Pricing.excludedModels.contains(model) { return }
+                    var t = ModelTokens()
+                    t.input = tup[0]; t.cachedInput = tup[1]; t.output = tup[2]
+                    add(&fa!, hour: keyer.key(obj.str("timestamp")), provider: .codex, model: model,
+                        project: curProject ?? "?", tokens: t)
                 }
-                guard let payload = obj.dict("payload"), payload.str("type") == "token_count",
-                      let last = payload.dict("info")?.dict("last_token_usage") else { continue }
-                let tup = [last.int("input_tokens"), last.int("cached_input_tokens"), last.int("output_tokens")]
-                if skipper?.shouldSkip(tup) == true { continue }   // inherited fork replay — counted in the parent
-                let total = payload.dict("info")?.dict("total_token_usage")
-                let fp = "\(obj.str("timestamp") ?? "")|\(tup[0])|\(tup[1])|\(tup[2])|\(total?.int("input_tokens") ?? -1)|\(total?.int("output_tokens") ?? -1)"
-                if fp == lastFP { continue }   // consecutive duplicate token_count snapshot
-                lastFP = fp
-                let model = curModel ?? "unknown"
-                if Pricing.excludedModels.contains(model) { continue }
-                var t = ModelTokens()
-                t.input = tup[0]; t.cachedInput = tup[1]; t.output = tup[2]
-                add(&fa!, hour: keyer.key(obj.str("timestamp")), provider: .codex, model: model,
-                    project: curProject ?? "?", tokens: t)
             }
+            // Caught mid-replay: re-read from 0 next time with a fresh skipper.
+            if skipper?.stillSkipping == true { aggs[path] = nil; continue }
             fa!.lastModel = curModel; fa!.lastProject = curProject; fa!.lastTokenFP = lastFP
             fa!.offset = reader.safeOffset; fa!.mtime = id.mtime
             aggs[path] = fa

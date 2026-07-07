@@ -142,9 +142,13 @@ extension Dictionary where Key == String, Value == Any {
 // MARK: - filesystem
 
 /// Recursively walk a directory, yielding files whose name matches `suffix`.
-func files(under root: String, suffix: String) -> [String] {
+/// Returns nil when the directory can't be enumerated (missing / unreadable /
+/// access not granted) — distinct from an empty-but-readable directory (`[]`),
+/// so a transient access failure isn't mistaken for "everything was deleted"
+/// and used to wipe the incremental cache.
+func files(under root: String, suffix: String) -> [String]? {
     let fm = FileManager.default
-    guard let en = fm.enumerator(atPath: root) else { return [] }
+    guard let en = fm.enumerator(atPath: root) else { return nil }
     var out: [String] = []
     for case let rel as String in en where rel.hasSuffix(suffix) {
         out.append((root as NSString).appendingPathComponent(rel))

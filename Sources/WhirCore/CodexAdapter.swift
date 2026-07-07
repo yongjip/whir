@@ -27,14 +27,20 @@ public struct CodexAdapter {
         }()
 
         var present = Set<String>()
+        var allReadable = true
         for r in roots {
-            for path in files(under: r, suffix: ".jsonl") {
+            guard let found = files(under: r, suffix: ".jsonl") else { allReadable = false; continue }
+            for path in found {
                 if let n = needle, !path.contains(n) { continue }
                 present.insert(path)
             }
         }
-        for (path, fa) in aggs where fa.provider == .codex && !present.contains(path) {
-            aggs[path] = nil
+        // Only prune when every root was readable — a transient access failure
+        // must not wipe cached aggregates and force a multi-GB rescan on recovery.
+        if allReadable {
+            for (path, fa) in aggs where fa.provider == .codex && !present.contains(path) {
+                aggs[path] = nil
+            }
         }
 
         for path in present {
@@ -61,30 +67,39 @@ public struct CodexAdapter {
                 let isCtx = raw.contains(LineNeedle.turnContext)
                 let isTok = raw.contains(LineNeedle.tokenCount)
                 if !isCtx && !isTok { continue }
-                guard let obj = jsonObject(raw.string) else { continue }
+                // Drain the per-line JSONSerialization garbage each iteration —
+                // without a pool it accumulates across the whole multi-GB scan
+                // (this job has no await, so the task pool never drains mid-scan).
+                autoreleasepool {
+                    guard let obj = jsonObject(raw.string) else { return }
 
-                if obj.str("type") == "turn_context" {
-                    if let m = obj.dict("payload")?.str("model") { curModel = m }
-                    continue
+                    if obj.str("type") == "turn_context" {
+                        if let m = obj.dict("payload")?.str("model") { curModel = m }
+                        return
+                    }
+                    guard let payload = obj.dict("payload"), payload.str("type") == "token_count",
+                          let last = payload.dict("info")?.dict("last_token_usage") else { return }
+
+                    let tup = [last.int("input_tokens"), last.int("cached_input_tokens"), last.int("output_tokens")]
+                    if skipper?.shouldSkip(tup) == true { return }   // inherited fork replay — counted in the parent
+
+                    let total = payload.dict("info")?.dict("total_token_usage")
+                    let fp = "\(obj.str("timestamp") ?? "")|\(tup[0])|\(tup[1])|\(tup[2])|\(total?.int("input_tokens") ?? -1)|\(total?.int("output_tokens") ?? -1)"
+                    if fp == lastFP { return }   // consecutive duplicate token_count snapshot (Codex re-emit)
+                    lastFP = fp
+
+                    let model = curModel ?? "unknown"
+                    if Pricing.excludedModels.contains(model) { return }
+
+                    var t = ModelTokens()
+                    t.input = tup[0]; t.cachedInput = tup[1]; t.output = tup[2]
+                    fa!.models[model] = (fa!.models[model] ?? ModelTokens()) + t
                 }
-                guard let payload = obj.dict("payload"), payload.str("type") == "token_count",
-                      let last = payload.dict("info")?.dict("last_token_usage") else { continue }
-
-                let tup = [last.int("input_tokens"), last.int("cached_input_tokens"), last.int("output_tokens")]
-                if skipper?.shouldSkip(tup) == true { continue }   // inherited fork replay — counted in the parent
-
-                let total = payload.dict("info")?.dict("total_token_usage")
-                let fp = "\(obj.str("timestamp") ?? "")|\(tup[0])|\(tup[1])|\(tup[2])|\(total?.int("input_tokens") ?? -1)|\(total?.int("output_tokens") ?? -1)"
-                if fp == lastFP { continue }   // consecutive duplicate token_count snapshot (Codex re-emit)
-                lastFP = fp
-
-                let model = curModel ?? "unknown"
-                if Pricing.excludedModels.contains(model) { continue }
-
-                var t = ModelTokens()
-                t.input = tup[0]; t.cachedInput = tup[1]; t.output = tup[2]
-                fa!.models[model] = (fa!.models[model] ?? ModelTokens()) + t
             }
+            // Caught the fork mid-replay: leave the cursor at 0 (drop the partial
+            // agg) so the next scan re-reads with a fresh skipper. Nothing new was
+            // counted, so it costs nothing and avoids double-counting the rest.
+            if skipper?.stillSkipping == true { aggs[path] = nil; continue }
             fa!.lastModel = curModel
             fa!.lastTokenFP = lastFP
             fa!.offset = reader.safeOffset
