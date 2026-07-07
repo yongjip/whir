@@ -18,6 +18,15 @@ enum FolderAccess {
     private static func key(_ id: String) -> String { "folderBookmark.\(id)" }
     static func hasBookmark(_ id: String) -> Bool { UserDefaults.standard.data(forKey: key(id)) != nil }
 
+    /// The user's REAL home (~), even in the sandbox — where homePath()/
+    /// FileManager.homeDirectoryForCurrentUser resolve to the app container.
+    /// Only for pre-navigating the grant panel: powerbox runs out of process and
+    /// can open there even though the sandboxed app itself can't reach it yet.
+    private static func realHome() -> String {
+        if let pw = getpwuid(getuid()) { return String(cString: pw.pointee.pw_dir) }
+        return homePath("")
+    }
+
     /// One granted folder is enough to start — not everyone uses both tools.
     /// The popover offers the missing grant afterwards.
     static var needsOnboarding: Bool {
@@ -85,8 +94,9 @@ enum FolderAccess {
         panel.allowsMultipleSelection = false
         panel.showsHiddenFiles = true
         // Open inside the target folder — the default "Grant" click selects it,
-        // no hidden-folder hunting.
-        panel.directoryURL = URL(fileURLWithPath: homePath(name), isDirectory: true)
+        // no hidden-folder hunting. Must use the REAL home, not homePath() (which
+        // is the sandbox container), or the panel opens at the powerbox default.
+        panel.directoryURL = URL(fileURLWithPath: realHome() + "/" + name, isDirectory: true)
         panel.prompt = "Grant"
         panel.message = "Grant read-only access to ~/\(name) — it's already open here, just click Grant."
         guard panel.runModal() == .OK, let url = panel.url else { return false }

@@ -34,7 +34,9 @@ struct PopoverView: View {
     }
 
     private func connectHint(_ tool: String, _ id: String, _ path: String) -> some View {
-        Button("Connect \(tool) (\(path))…") {
+        // "Reconnect" when a grant exists but stopped resolving; "Connect" when none.
+        let verb = FolderAccess.hasBookmark(id) ? "Reconnect" : "Connect"
+        return Button("\(verb) \(tool) (\(path))…") {
             if FolderAccess.grant(id: id) { model.refresh() }
         }
         .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Color.accentColor)
@@ -161,9 +163,14 @@ struct PopoverView: View {
             }
 
             if model.loading {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Calculating…").foregroundStyle(.secondary).font(.system(size: 13))
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Calculating…").foregroundStyle(.secondary).font(.system(size: 13))
+                    }
+                    Text("The first scan can take a moment with large logs — it's one-time.")
+                        .font(.system(size: 11)).foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }.padding(.vertical, 18)
             } else if model.total == 0 && !model.hasReadableRoot {
                 noLogsView
@@ -193,12 +200,16 @@ struct PopoverView: View {
                     }.padding(.vertical, 5)
                 }
 
-                // With one-folder onboarding the other tool may be unconnected —
-                // explain its $0 row instead of leaving it silently zero.
-                if FolderAccess.isSandboxed, !FolderAccess.hasBookmark(FolderAccess.claudeID) {
+                // Surface a tool that isn't contributing — either never connected
+                // (one-folder onboarding) or connected to a folder that's since
+                // gone unreadable (moved / deleted-and-recreated). Readable-but-
+                // empty doesn't trigger this, so false positives are unlikely.
+                if FolderAccess.isSandboxed,
+                   !FolderAccess.hasBookmark(FolderAccess.claudeID) || !model.claudeReadable {
                     connectHint("Claude Code", FolderAccess.claudeID, "~/.claude")
                 }
-                if FolderAccess.isSandboxed, !FolderAccess.hasBookmark(FolderAccess.codexID) {
+                if FolderAccess.isSandboxed,
+                   !FolderAccess.hasBookmark(FolderAccess.codexID) || !model.codexReadable {
                     connectHint("Codex", FolderAccess.codexID, "~/.codex")
                 }
             }
