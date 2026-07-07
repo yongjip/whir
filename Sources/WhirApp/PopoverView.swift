@@ -102,7 +102,9 @@ struct PopoverView: View {
     private var noLogsView: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("No logs found").font(.system(size: 16, weight: .medium))
-            Text("Whir couldn't read Claude Code (~/.claude) or Codex (~/.codex) logs here. Run a coding session, or confirm those folders exist.")
+            // verbatim: a plain Text literal is parsed as Markdown, and the two
+            // "~" in the paths read as strikethrough delimiters.
+            Text(verbatim: "Whir couldn't read Claude Code (~/.claude) or Codex (~/.codex) logs here. Run a coding session, or confirm those folders exist.")
                 .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             // The usual cause in the sandboxed build is a grant that points at
             // the wrong folder — give a way back that doesn't need onboarding.
