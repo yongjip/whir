@@ -34,7 +34,13 @@ final class UsageModel {
         ]
     }
 
-    var menuTitle: String { loading ? "AI $…" : money0(total) }
+    // Never assert a confident "$0" before there's real data: money only when a
+    // headline exists; scanning → "AI $…"; idle-but-empty (no grant / no logs) →
+    // the app name, not "$0".
+    var menuTitle: String {
+        guard h.headline != nil else { return loading ? "AI $…" : "Whir" }
+        return money0(total)
+    }
 
     /// The History model owns the scan + its auto-refresh timer; just delegate.
     func refresh() { h.refresh() }

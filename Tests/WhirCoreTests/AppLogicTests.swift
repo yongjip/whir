@@ -58,4 +58,18 @@ final class AppLogicTests: XCTestCase {
         XCTAssertFalse(Pricing.isStale(now: asOf.addingTimeInterval(10 * 24 * 3600)))
         XCTAssertTrue(Pricing.isStale(now: asOf.addingTimeInterval(200 * 24 * 3600)))
     }
+
+    // last-30d headline: a true trailing calendar window, not "last 30 active days".
+    func testSumFromCalendarWindow() {
+        let buckets = [
+            ("2026-05-01", 100.0),   // way before the cutoff — excluded
+            ("2026-05-15", 50.0),    // before cutoff — excluded
+            ("2026-06-02", 10.0),    // on/after cutoff — included
+            ("2026-06-30", 20.0),    // included
+            ("unknown", 999.0),      // must be skipped despite sorting after dates
+        ]
+        XCTAssertEqual(sumFrom(cutoff: "2026-06-01", buckets), 30.0, accuracy: 1e-9)
+        XCTAssertEqual(sumFrom(cutoff: "2026-01-01", buckets), 180.0, accuracy: 1e-9)
+        XCTAssertEqual(sumFrom(cutoff: "2026-07-01", buckets), 0.0, accuracy: 1e-9)
+    }
 }

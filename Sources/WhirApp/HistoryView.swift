@@ -36,7 +36,8 @@ struct HistoryView: View {
                 Text("Usage history").font(.title3.weight(.semibold))
             } else {
                 Text(moneyAdaptive(model.rangeTotal)).font(.title3.weight(.semibold)).monospacedDigit()
-                Text("last \(model.recent.count) \(model.granularity.rawValue)s")
+                // "with usage" — recent shows buckets that had cost, not a contiguous calendar span.
+                Text("\(model.recent.count) \(model.granularity.rawValue)s with usage")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()

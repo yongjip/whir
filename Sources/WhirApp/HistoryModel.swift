@@ -101,7 +101,9 @@ final class HistoryModel {
         // instead of a confident $0.
         guard let snap = snapshot, !snap.isEmpty else { headline = nil; return }
         let daily = snap.grouped(.day, by: .provider)
-        let last30 = daily.suffix(30).reduce(0.0) { $0 + $1.total }
+        // Trailing 30 CALENDAR days (today-29 … today), not the last 30 days that
+        // had usage — the latter over-inflates the ROI headline for intermittent users.
+        let last30 = sumFrom(cutoff: Self.dayKey(daysAgo: 29), daily.map { ($0.key, $0.total) })
         var today = 0.0, cx = 0.0, cl = 0.0
         if let p = daily.last(where: { $0.key == Self.todayKey }) {
             today = p.total
@@ -111,11 +113,15 @@ final class HistoryModel {
     }
 
     /// Local "yyyy-MM-dd" — matches the History day-bucket keys.
-    nonisolated static var todayKey: String {
+    nonisolated static var todayKey: String { dayKey(daysAgo: 0) }
+
+    /// The day-bucket key `n` days before today (local time).
+    nonisolated static func dayKey(daysAgo n: Int) -> String {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         f.locale = Locale(identifier: "en_US_POSIX")
-        return f.string(from: Date())
+        let date = Calendar.current.date(byAdding: .day, value: -n, to: Date()) ?? Date()
+        return f.string(from: date)
     }
 
     func color(_ name: String) -> Color { colorMap[name] ?? .gray }
