@@ -16,7 +16,10 @@ final class UsageModel {
 
     private var h: HistoryModel { HistoryModel.shared }
 
-    var loading: Bool { h.headline == nil && h.loading }
+    // "No data yet AND a scan could still produce some" — the popover shows
+    // "Calculating…" then, instead of prematurely declaring "No logs found"
+    // while the first post-grant scan is still running.
+    var loading: Bool { h.headline == nil && (h.loading || h.building) }
     var refreshing: Bool { h.building }
     var hasReadableRoot: Bool { h.hasReadableRoot }
     var total: Double { h.headline?.today ?? 0 }        // today's spend (the headline number)
