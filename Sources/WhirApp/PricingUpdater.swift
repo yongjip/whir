@@ -10,6 +10,7 @@ import WhirCore
 final class PricingUpdater {
     static let shared = PricingUpdater()
     static let defaultsKey = "pricing.autoUpdate"
+    private static let lastFetchKey = "pricing.lastFetch"
 
     private static let source = URL(string: "https://raw.githubusercontent.com/yongjip/whir/main/pricing.json")!
     private var timer: Timer?
@@ -28,23 +29,29 @@ final class PricingUpdater {
         }
     }
 
-    func refreshNow() {
+    /// `force` (Settings opt-in) bypasses the once-a-day throttle for immediacy.
+    func refreshNow(force: Bool = false) {
         guard enabled else { return }
+        // At most one fetch per day across launches — a menu-bar app relaunches
+        // often, and "daily" is the promise in Settings, the entitlement, and CLAUDE.md.
+        if !force, let last = UserDefaults.standard.object(forKey: Self.lastFetchKey) as? Date,
+           Date().timeIntervalSince(last) < 24 * 3600 { return }
         Task {
             let config = URLSessionConfiguration.ephemeral
             config.timeoutIntervalForRequest = 15
             let session = URLSession(configuration: config)
             guard let (data, resp) = try? await session.data(from: Self.source),
                   (resp as? HTTPURLResponse)?.statusCode == 200,
-                  let table = PricingTable.parse(data) else { return }   // bad fetch/parse → keep current table
-            // Cache the raw file (the next launch adopts it offline), then apply.
-            // A newer table shifts Pricing.asOf, which invalidates the scan
-            // caches — the triggered refresh re-prices everything consistently.
-            let url = Pricing.overrideURL()
-            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
-                                                     withIntermediateDirectories: true)
-            try? data.write(to: url, options: .atomic)
+                  let table = PricingTable.parse(data) else { return }   // bad fetch/parse → keep current table, retry next launch
+            UserDefaults.standard.set(Date(), forKey: Self.lastFetchKey)   // stamp only a successful fetch
+            // Adopt newest-wins, and cache to disk ONLY the table we actually
+            // applied — otherwise a stale upstream (CDN edge, reverted commit)
+            // would downgrade the on-disk override the next launch reads.
             if Pricing.apply(table) {
+                let url = Pricing.overrideURL()
+                try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                         withIntermediateDirectories: true)
+                try? data.write(to: url, options: .atomic)
                 HistoryModel.shared.refresh()
             }
         }
