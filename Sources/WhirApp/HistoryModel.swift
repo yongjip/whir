@@ -93,7 +93,10 @@ final class HistoryModel {
     /// Today's spend (+ provider split) and the last-30-days total, from the
     /// all-time daily buckets — fixed window, not affected by the picker.
     private func recomputeHeadline() {
-        guard let snap = snapshot else { headline = nil; return }
+        // An empty snapshot carries no information (pre-grant scan, fresh
+        // install): keep the headline nil so the UI shows loading / no-logs
+        // instead of a confident $0.
+        guard let snap = snapshot, !snap.isEmpty else { headline = nil; return }
         let daily = snap.grouped(.day, by: .provider)
         let last30 = daily.suffix(30).reduce(0.0) { $0 + $1.total }
         var today = 0.0, cx = 0.0, cl = 0.0
