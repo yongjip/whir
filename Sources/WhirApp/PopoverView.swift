@@ -33,6 +33,14 @@ struct PopoverView: View {
         if !needsGrant { model.refresh() }
     }
 
+    private func connectHint(_ tool: String, _ id: String, _ path: String) -> some View {
+        Button("Connect \(tool) (\(path))…") {
+            if FolderAccess.grant(id: id) { model.refresh() }
+        }
+        .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Color.accentColor)
+        .padding(.vertical, 3)
+    }
+
     private func gb(_ b: Double) -> String { String(format: "%.0f", b / 1e9) }
     private func loadColor(_ f: Double) -> Color { f < 0.6 ? .green : (f < 0.85 ? .orange : .red) }
     private func statRow(_ label: String, _ fraction: Double, _ detail: String, _ color: Color) -> some View {
@@ -96,19 +104,40 @@ struct PopoverView: View {
             Text("No logs found").font(.system(size: 16, weight: .medium))
             Text("Whir couldn't read Claude Code (~/.claude) or Codex (~/.codex) logs here. Run a coding session, or confirm those folders exist.")
                 .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            // The usual cause in the sandboxed build is a grant that points at
+            // the wrong folder — give a way back that doesn't need onboarding.
+            if FolderAccess.isSandboxed {
+                Text("If access was granted to the wrong folder, grant it again:")
+                    .font(.system(size: 12)).foregroundStyle(.secondary).padding(.top, 4)
+                HStack(spacing: 8) {
+                    Button("Re-grant ~/.claude…") {
+                        if FolderAccess.grant(id: FolderAccess.claudeID) { model.refresh() }
+                    }
+                    Button("Re-grant ~/.codex…") {
+                        if FolderAccess.grant(id: FolderAccess.codexID) { model.refresh() }
+                    }
+                }
+            }
         }.padding(.vertical, 12)
     }
 
     private var grantView: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Grant read access").font(.system(size: 14, weight: .medium))
-            Text("Whir reads token counts from your local Claude Code and Codex folders — nothing else, never uploaded. Pick each folder once (press \u{21E7}\u{2318}. to show hidden folders).")
+            Text("Whir reads token counts from your local Claude Code and Codex folders — nothing else, never uploaded. Each picker opens on the right folder; just click Grant. Use only one of the tools? One folder is enough.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
             Button(FolderAccess.hasBookmark(FolderAccess.claudeID) ? "✓ ~/.claude granted" : "Grant ~/.claude…") {
-                FolderAccess.grant(id: FolderAccess.claudeID); refreshGrant()
+                // Chain the second picker so both grants are one flow.
+                if FolderAccess.grant(id: FolderAccess.claudeID), !FolderAccess.hasBookmark(FolderAccess.codexID) {
+                    FolderAccess.grant(id: FolderAccess.codexID)
+                }
+                refreshGrant()
             }
             Button(FolderAccess.hasBookmark(FolderAccess.codexID) ? "✓ ~/.codex granted" : "Grant ~/.codex…") {
-                FolderAccess.grant(id: FolderAccess.codexID); refreshGrant()
+                if FolderAccess.grant(id: FolderAccess.codexID), !FolderAccess.hasBookmark(FolderAccess.claudeID) {
+                    FolderAccess.grant(id: FolderAccess.claudeID)
+                }
+                refreshGrant()
             }
             HStack {
                 Spacer()
@@ -160,6 +189,15 @@ struct PopoverView: View {
                             .font(.system(size: 11)).foregroundStyle(.secondary)
                             .frame(width: 36, alignment: .trailing)
                     }.padding(.vertical, 5)
+                }
+
+                // With one-folder onboarding the other tool may be unconnected —
+                // explain its $0 row instead of leaving it silently zero.
+                if FolderAccess.isSandboxed, !FolderAccess.hasBookmark(FolderAccess.claudeID) {
+                    connectHint("Claude Code", FolderAccess.claudeID, "~/.claude")
+                }
+                if FolderAccess.isSandboxed, !FolderAccess.hasBookmark(FolderAccess.codexID) {
+                    connectHint("Codex", FolderAccess.codexID, "~/.codex")
                 }
             }
 
