@@ -43,3 +43,11 @@ public func validSelection(_ selected: String?, in keys: [String]) -> String? {
     guard let k = selected, keys.contains(k) else { return nil }
     return k
 }
+
+/// Sum bucket totals on or after `cutoff` (a "yyyy-MM-dd" key), skipping the
+/// "unknown" bucket. Day keys are fixed-width, so lexicographic `>=` is
+/// chronological — this gives a true trailing *calendar* window, not "the last N
+/// days that happened to have usage" (which over-counts for intermittent users).
+public func sumFrom(cutoff: String, _ buckets: [(key: String, total: Double)]) -> Double {
+    buckets.reduce(0) { $0 + ($1.key != "unknown" && $1.key >= cutoff ? $1.total : 0) }
+}

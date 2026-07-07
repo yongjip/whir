@@ -16,7 +16,10 @@ struct TodayUsageIntent: AppIntent {
     static var openAppWhenRun: Bool = false
 
     func perform() async throws -> some IntentResult & ReturnsValue<Double> & ProvidesDialog {
-        let total = TodayUsage.todaysSpend()
+        // No cached scan yet → don't assert "$0"; tell the user to open Whir once.
+        guard let total = TodayUsage.todaysSpend() else {
+            return .result(value: 0, dialog: IntentDialog("No usage data yet — open Whir to scan your logs."))
+        }
         return .result(value: total, dialog: IntentDialog("Today's AI usage: \(money0(total))"))
     }
 }
@@ -37,9 +40,10 @@ struct WhirShortcuts: AppShortcutsProvider {
 }
 
 /// Pure, actor-agnostic read of today's spend from the cached snapshot.
+/// nil = no scan cached yet (distinct from a real "today so far: $0").
 enum TodayUsage {
-    static func todaysSpend() -> Double {
-        guard let snap = HistoryEngine().cachedSnapshot() else { return 0 }
+    static func todaysSpend() -> Double? {
+        guard let snap = HistoryEngine().cachedSnapshot() else { return nil }
         let daily = snap.grouped(.day, by: .provider)
         return daily.last(where: { $0.key == HistoryModel.todayKey })?.total ?? 0
     }
