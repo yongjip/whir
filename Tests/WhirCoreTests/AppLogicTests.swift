@@ -32,6 +32,13 @@ final class AppLogicTests: XCTestCase {
         XCTAssertNil(validSelection("a", in: []))
     }
 
+    func testPreferredSelectionDefaultsToNewestDatedBucket() {
+        XCTAssertEqual(preferredSelection("a", in: ["a", "b"]), "a")
+        XCTAssertEqual(preferredSelection(nil, in: ["2026-07-10", "2026-07-11"]), "2026-07-11")
+        XCTAssertEqual(preferredSelection(nil, in: ["2026-07-11", "unknown"]), "2026-07-11")
+        XCTAssertNil(preferredSelection(nil, in: ["unknown"]))
+    }
+
     // Missing/unreadable roots must be distinguishable from "no usage".
     func testRootsStatusDetectsMissingFolders() throws {
         let fm = FileManager.default

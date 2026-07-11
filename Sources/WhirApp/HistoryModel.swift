@@ -20,7 +20,14 @@ final class HistoryModel {
     /// Menu-bar / popover headline: TODAY's spend (with provider split) for the
     /// glanceable number, plus the rolling last-30-days total for the ROI line.
     /// Independent of the granularity picker. nil until first built.
-    struct Headline: Equatable { let today: Double; let codex: Double; let claude: Double; let last30: Double }
+    struct Headline: Equatable {
+        let today: Double
+        let codex: Double
+        let claude: Double
+        let last30: Double
+        let unpricedModels: Int
+        let unpricedTokenFraction: Double
+    }
     private(set) var headline: Headline?
     /// Per-provider root readability (for "connect this tool" hints); readable
     /// means the folder resolves and can be listed, not that it has logs.
@@ -84,7 +91,7 @@ final class HistoryModel {
         points = snapshot?.grouped(granularity, by: groupBy) ?? []
         // Drop a selection whose bucket no longer exists (e.g. aged out after a
         // refresh), else the drilldown shows a stale header over empty tables.
-        selectedKey = validSelection(selectedKey, in: points.map(\.key))
+        selectedKey = preferredSelection(selectedKey, in: points.map(\.key))
         // Stable colors: assign the palette to the highest-cost groups overall; rest gray.
         var totals: [String: Double] = [:]
         for p in points { for s in p.slices { totals[s.name, default: 0] += s.cost } }
@@ -112,7 +119,24 @@ final class HistoryModel {
             today = p.total
             for s in p.slices { if s.name == "Codex" { cx += s.cost } else { cl += s.cost } }
         }
-        headline = Headline(today: today, codex: cx, claude: cl, last30: last30)
+        let detail = snap.detail(for: Self.todayKey, .day)
+        var totalTokens = 0
+        var unpricedTokens = 0
+        var unpricedModels = 0
+        for model in detail.models {
+            // Codex cached input is a subset of input, while Claude cache
+            // read/write tokens are separate. Count each physical token once.
+            let t = model.tokens
+            let count = t.input + t.output + t.cacheRead + t.cacheWrite5m + t.cacheWrite1h
+            totalTokens += count
+            if !model.priced {
+                unpricedTokens += count
+                unpricedModels += 1
+            }
+        }
+        let fraction = totalTokens > 0 ? Double(unpricedTokens) / Double(totalTokens) : 0
+        headline = Headline(today: today, codex: cx, claude: cl, last30: last30,
+                            unpricedModels: unpricedModels, unpricedTokenFraction: fraction)
     }
 
     /// Local "yyyy-MM-dd" — matches the History day-bucket keys.

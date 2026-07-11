@@ -9,6 +9,7 @@ struct PopoverView: View {
     @State private var monitor = SystemMonitor()
     @AppStorage("sub.claude") private var claudeSub = 0.0
     @AppStorage("sub.codex") private var codexSub = 0.0
+    @AppStorage("system.expanded") private var systemExpanded = false
     private var totalSub: Double { claudeSub + codexSub }
 
     var body: some View {
@@ -67,21 +68,26 @@ struct PopoverView: View {
         if totalSub >= 1, let mult = roiMultiplier(total: model.last30, subscription: Double(shownSub)) {
             let win = mult >= 1   // below break-even shouldn't look like a value "win"
             roiBlock(win: win, accent: win) {
-                Text(moneyAdaptive(model.last30))
-                    .font(.system(size: 16, weight: .semibold)).monospacedDigit()
-                    .foregroundStyle(win ? Color.accentColor : .primary)
-                Text(win ? "last 30d · \(roiText(mult)) your $\(shownSub)/mo"
-                         : "last 30d · \(Int((mult * 100).rounded()))% of your $\(shownSub)/mo")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                Spacer()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(moneyAdaptive(model.last30))
+                        .font(.system(size: 16, weight: .semibold)).monospacedDigit()
+                        .foregroundStyle(win ? Color.accentColor : .primary)
+                    Text(win ? "Last 30 days · \(roiText(mult)) your $\(shownSub)/mo"
+                             : "Last 30 days · \(Int((mult * 100).rounded()))% of your $\(shownSub)/mo")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .lineLimit(1).minimumScaleFactor(0.85)
+                }
+                Spacer(minLength: 0)
             }
         } else {
             // No subscription set yet — still show the 30-day spend, plus a prompt.
             roiBlock(win: false, accent: false) {
-                Text(moneyAdaptive(model.last30))
-                    .font(.system(size: 16, weight: .semibold)).monospacedDigit()
-                Text("last 30 days").font(.system(size: 11)).foregroundStyle(.secondary)
-                Spacer()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(moneyAdaptive(model.last30))
+                        .font(.system(size: 16, weight: .semibold)).monospacedDigit()
+                    Text("Last 30 days").font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
                 Button("Set $/mo for ROI →") { openSettings() }
                     .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Color.accentColor)
             }
@@ -155,7 +161,7 @@ struct PopoverView: View {
     private var mainView: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("AI cost").font(.system(size: 13)).foregroundStyle(.secondary)
+                Text("Usage value").font(.system(size: 13)).foregroundStyle(.secondary)
                 Spacer()
                 Text("Today").font(.system(size: 12)).foregroundStyle(.secondary)
                     .padding(.horizontal, 8).padding(.vertical, 3)
@@ -215,15 +221,33 @@ struct PopoverView: View {
             }
 
             Divider().padding(.vertical, 11)
-            VStack(spacing: 7) {
-                statRow("CPU", monitor.snapshot.cpu,
-                        "\(Int((monitor.snapshot.cpu * 100).rounded()))%", loadColor(monitor.snapshot.cpu))
-                statRow("RAM", monitor.snapshot.ramFraction,
-                        "\(gb(Double(monitor.snapshot.ramUsed))) / \(gb(Double(monitor.snapshot.ramTotal))) GB",
-                        loadColor(monitor.snapshot.ramFraction))
-                statRow("Disk", monitor.snapshot.diskFraction,
-                        "\(gb(Double(monitor.snapshot.diskUsed))) / \(gb(Double(monitor.snapshot.diskTotal))) GB",
-                        loadColor(monitor.snapshot.diskFraction))
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    systemExpanded.toggle()
+                } label: {
+                    HStack {
+                        Text("System").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+                        Spacer()
+                        Image(systemName: systemExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if systemExpanded {
+                    VStack(spacing: 7) {
+                        statRow("CPU", monitor.snapshot.cpu,
+                                "\(Int((monitor.snapshot.cpu * 100).rounded()))%", loadColor(monitor.snapshot.cpu))
+                        statRow("RAM", monitor.snapshot.ramFraction,
+                                "\(gb(Double(monitor.snapshot.ramUsed))) / \(gb(Double(monitor.snapshot.ramTotal))) GB",
+                                loadColor(monitor.snapshot.ramFraction))
+                        statRow("Disk", monitor.snapshot.diskFraction,
+                                "\(gb(Double(monitor.snapshot.diskUsed))) / \(gb(Double(monitor.snapshot.diskTotal))) GB",
+                                loadColor(monitor.snapshot.diskFraction))
+                    }
+                    .padding(.top, 9)
+                }
             }
 
             Divider().padding(.vertical, 11)
@@ -236,9 +260,23 @@ struct PopoverView: View {
             Text(Pricing.isStale()
                  ? "⚠ prices as of \(Pricing.asOf) — may be outdated"
                  : "prices as of \(Pricing.asOf)")
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .foregroundStyle(Pricing.isStale() ? Color.orange : Color.secondary)
                 .padding(.top, 2)
+
+            if model.unpricedModels > 0 {
+                Button { openAppWindow("history") } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10)).foregroundStyle(.orange)
+                        Text(priceGapText)
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 5)
+                .help("Open history to see models without prices")
+            }
 
             HStack(spacing: 8) {
                 Button("Refresh") { model.refresh() }
@@ -257,9 +295,18 @@ struct PopoverView: View {
         .padding(16)
         .frame(width: 300)
         .onAppear {
-            monitor.start()
+            if systemExpanded { monitor.start() }
             needsGrant = FolderAccess.needsOnboarding   // re-detect a lost/revoked grant
         }
+        .onChange(of: systemExpanded) { _, expanded in
+            if expanded { monitor.start() } else { monitor.stop() }
+        }
         .onDisappear { monitor.stop() }
+    }
+
+    private var priceGapText: String {
+        let models = model.unpricedModels
+        let pct = max(1, Int((model.unpricedTokenFraction * 100).rounded()))
+        return "\(models) model\(models == 1 ? "" : "s") unpriced · \(pct)% of today's tokens"
     }
 }

@@ -69,6 +69,14 @@ sandboxed).
 
 ## What's New — paste into ASC for each update
 
+**v0.2.1 (build 6):**
+> - Newly released OpenAI text models are now picked up automatically from the
+>   downloaded price table, with safer exact model matching.
+> - Added pricing coverage warnings when a model has usage but no known price.
+> - Refined the menu-bar popover with clearer usage-value language, a compact
+>   collapsible system section, and a more readable 30-day value card.
+> - Usage History now opens on the latest period automatically.
+
 **v0.2.0 (build 5):**
 > - Fixed setup: the folder picker now opens on the right folder and checks your
 >   choice, so access can't land on the wrong place and read $0. Re-grant any

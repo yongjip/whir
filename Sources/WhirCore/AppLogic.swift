@@ -44,6 +44,13 @@ public func validSelection(_ selected: String?, in keys: [String]) -> String? {
     return k
 }
 
+/// Preserve an existing history selection, otherwise open on the newest real
+/// bucket so the detail panel is useful immediately. `unknown` is diagnostic,
+/// not a helpful default when dated usage exists.
+public func preferredSelection(_ selected: String?, in keys: [String]) -> String? {
+    validSelection(selected, in: keys) ?? keys.last(where: { $0 != "unknown" })
+}
+
 /// Sum bucket totals on or after `cutoff` (a "yyyy-MM-dd" key), skipping the
 /// "unknown" bucket. Day keys are fixed-width, so lexicographic `>=` is
 /// chronological — this gives a true trailing *calendar* window, not "the last N

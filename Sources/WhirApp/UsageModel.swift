@@ -26,6 +26,8 @@ final class UsageModel {
     var codexReadable: Bool { h.roots.codexReadable }
     var total: Double { h.headline?.today ?? 0 }        // today's spend (the headline number)
     var last30: Double { h.headline?.last30 ?? 0 }      // last-30-days value, for the ROI line
+    var unpricedModels: Int { h.headline?.unpricedModels ?? 0 }
+    var unpricedTokenFraction: Double { h.headline?.unpricedTokenFraction ?? 0 }
 
     /// Today's provider split.
     var rows: [Row] {
