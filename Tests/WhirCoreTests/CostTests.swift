@@ -34,10 +34,11 @@ final class CostTests: XCTestCase {
         XCTAssertEqual(c!, 0.091766, accuracy: 1e-5)
     }
 
-    func testOpenAILongestPrefixWins() {
-        // "gpt-5.4-mini" must not resolve to the "gpt-5.4" tier
+    func testOpenAIExactModelWins() {
+        // "gpt-5.4-mini" is its own model, not the "gpt-5.4" tier.
         XCTAssertEqual(Pricing.openAIPrice("gpt-5.4-mini")?.input, 0.75)
         XCTAssertEqual(Pricing.openAIPrice("gpt-5.4")?.input, 2.5)
+        XCTAssertNil(Pricing.openAIPrice("gpt-5.7"))
     }
 
     func testCodexExcludedModelStillPricesByName() {

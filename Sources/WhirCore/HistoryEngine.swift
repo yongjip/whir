@@ -2,7 +2,7 @@ import Foundation
 
 /// All-time, hour-bucketed cache (separate from the menu-bar month cache).
 enum HistoryCache {
-    static let version = 5   // v5: Codex fork-prefix + consecutive-duplicate-snapshot dedup
+    static let version = 6   // v6: OpenAI exact-id pricing replaces broad prefix pricing
     private struct File: Codable { var version: Int; var pricingAsOf: String; var aggs: [String: HourAgg] }
     private static func path() -> String {
         (ScanCache.directory() as NSString).appendingPathComponent("history.json")

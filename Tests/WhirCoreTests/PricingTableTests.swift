@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import WhirCore
 
-/// Locks in the pricing.json override contract: defensive parsing, longest-prefix
+/// Locks in the pricing.json override contract: defensive parsing, provider-safe
 /// lookup, newer-asOf-wins, and built-in coverage of the current model lineup.
 /// These tests stay on the pure PricingTable layer (plus a rejected apply) so
 /// they can't perturb the global table other suites price against.
@@ -18,7 +18,8 @@ import Foundation
         #expect(t.asOf == "2026-07-02")
         #expect(t.claudePrice("claude-sonnet-5")?.input == 3)
         #expect(t.claudePrice("claude-sonnet-5")?.output == 15)
-        #expect(t.openAIPrice("gpt-9-mini")?.output == 4)       // prefix match
+        #expect(t.openAIPrice("gpt-9")?.output == 4)
+        #expect(t.openAIPrice("gpt-9-mini") == nil)             // distinct model id
         #expect(t.claudePrice("claude-opus-4-8") == nil)        // not in this table
     }
 
@@ -53,6 +54,23 @@ import Foundation
         #expect(t.claudePrice("claude-opus-4-8")?.input == 5)
     }
 
+    @Test func openAIUsesExactIDsAndDatedSnapshotFallback() throws {
+        let t = try #require(table("""
+        {"version": 1, "asOf": "2026-07-12",
+         "claude": [{"prefix": "claude-sonnet-5", "input": 3, "output": 15}],
+         "openai": [
+            {"prefix": "gpt-5", "input": 1.25, "cachedInput": 0.125, "output": 10},
+            {"prefix": "gpt-5.6", "input": 5, "cachedInput": 0.5, "output": 30},
+            {"prefix": "gpt-5.6-luna", "input": 1, "cachedInput": 0.1, "output": 6}
+         ]}
+        """))
+        #expect(t.openAIPrice("gpt-5.6")?.input == 5)
+        #expect(t.openAIPrice("gpt-5.6-luna")?.input == 1)
+        #expect(t.openAIPrice("gpt-5.7") == nil)
+        #expect(t.openAIPrice("gpt-5.6-2026-07-12")?.input == 5)
+        #expect(t.openAIPrice("gpt-5.6-20260712")?.input == 5)
+    }
+
     @Test func builtInCoversCurrentModels() {
         // The screenshot bug: sonnet-5 / fable-5 silently priced at $0.
         #expect(Pricing.builtIn.claudePrice("claude-opus-4-8")?.input == 5)
@@ -85,5 +103,9 @@ import Foundation
         for (prefix, _) in Pricing.builtIn.openai {
             #expect(t.openAIPrice(prefix) != nil, "openai \(prefix) unpriced")
         }
+        #expect(t.openAIPrice("gpt-5.6")?.input == 5)
+        #expect(t.openAIPrice("gpt-5.6-sol")?.output == 30)
+        #expect(t.openAIPrice("gpt-5.6-terra")?.input == 2.5)
+        #expect(t.openAIPrice("gpt-5.6-luna")?.output == 6)
     }
 }

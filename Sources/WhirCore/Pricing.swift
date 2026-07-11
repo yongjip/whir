@@ -1,8 +1,8 @@
 import Foundation
 
 /// A per-million-token price table: the compiled-in default, or one parsed from
-/// a local `pricing.json` override. Rows are matched by longest prefix, so
-/// dated snapshot suffixes still resolve.
+/// a local `pricing.json` override. Claude rows use family-prefix matching;
+/// OpenAI rows match exact model ids, with a dated-snapshot fallback.
 public struct PricingTable {
     public let asOf: String                      // "yyyy-MM-dd"
     let claude: [(String, Pricing.Claude)]
@@ -33,13 +33,27 @@ public struct PricingTable {
         return PricingTable(asOf: asOf, claude: claude, openai: openai)
     }
 
-    /// Longest-prefix match so a more specific row (e.g. a dated snapshot or a
-    /// `-mini` variant) wins over its family prefix.
+    /// Claude model ids use family prefixes for provider snapshot variants.
     func claudePrice(_ m: String) -> Pricing.Claude? {
         claude.filter { m.hasPrefix($0.0) }.max { $0.0.count < $1.0.count }?.1
     }
+
+    /// OpenAI base ids must not price a different future model (for example,
+    /// `gpt-5` must not catch `gpt-5.6`). Exact ids win; a base row may cover
+    /// only the provider's conventional dated snapshot suffix.
     func openAIPrice(_ m: String) -> Pricing.OpenAI? {
-        openai.filter { m.hasPrefix($0.0) }.max { $0.0.count < $1.0.count }?.1
+        if let exact = openai.first(where: { $0.0 == m }) { return exact.1 }
+        return openai.first { Self.isDatedSnapshot(m, of: $0.0) }?.1
+    }
+
+    private static func isDatedSnapshot(_ model: String, of base: String) -> Bool {
+        guard model.hasPrefix(base + "-") else { return false }
+        let suffix = model.dropFirst(base.count + 1)
+        if suffix.count == 8 { return suffix.allSatisfy(\.isNumber) }
+        guard suffix.count == 10 else { return false }
+        return suffix.enumerated().allSatisfy { offset, char in
+            (offset == 4 || offset == 7) ? char == "-" : char.isNumber
+        }
     }
 }
 
