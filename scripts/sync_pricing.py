@@ -11,8 +11,8 @@ Strategy
           multiplier, so a mismatched row would misprice silently. Family
           fallback prefixes (claude-opus-4, ...) cover log snapshots that are
           newer than LiteLLM.
-  OpenAI  curated mapping (Codex naming in LiteLLM is inconsistent); rows
-          missing upstream keep their current values.
+  OpenAI  auto-discover direct text GPT models with complete input/cache/output
+          prices. Explicit exceptions cover Codex ids LiteLLM does not expose.
 
 Safety
   - No write when nothing changed (no daily commit noise; asOf only moves on
@@ -42,14 +42,16 @@ CLAUDE_FAMILIES = [
     ("claude-haiku-4",  "claude-haiku-4-5"),
 ]
 
-# (whir prefix, litellm key) — values refresh from LiteLLM when present,
-# otherwise the row is carried over from the current pricing.json.
-OPENAI_ROWS = [
-    ("gpt-5.5",             "gpt-5.5"),
-    ("gpt-5.4-mini",        "gpt-5.4-mini"),
-    ("gpt-5.4",             "gpt-5.4"),
+# (whir id, litellm key) for Codex model ids absent or inconsistently named in
+# LiteLLM. Ordinary OpenAI models are discovered automatically below.
+OPENAI_EXCEPTIONS = [
     ("gpt-5.3-codex-spark", "gpt-5.3-codex-spark"),
 ]
+
+# LiteLLM labels some specialized APIs as chat models. Codex logs contain text
+# model ids, so exclude those modalities rather than silently applying their
+# token tables to an unrelated future Codex id.
+OPENAI_EXCLUDED_MARKERS = ("audio", "realtime", "search")
 
 MAX_RATIO = 2.0   # a legit repricing beyond 2x either way deserves human eyes
 
@@ -106,15 +108,32 @@ def main():
     if len(claude) < 5:
         sys.exit(f"error: only {len(claude)} Claude rows survived — upstream shape changed? aborting")
 
-    # ---- OpenAI: curated mapping, carry-over when missing upstream ----
+    # ---- OpenAI: auto-discover direct text models + explicit exceptions ----
     openai = {}
-    for prefix, key in OPENAI_ROWS:
+    for key, m in sorted(lite.items()):
+        if not (isinstance(m, dict) and key.startswith("gpt-") and "/" not in key):
+            continue
+        if m.get("litellm_provider") != "openai" or m.get("mode") != "chat":
+            continue
+        if any(marker in key for marker in OPENAI_EXCLUDED_MARKERS):
+            continue
+        i = per_million(m, "input_cost_per_token")
+        c = per_million(m, "cache_read_input_token_cost")
+        o = per_million(m, "output_cost_per_token")
+        if not i or not c or not o or c > i:
+            continue
+        openai[key] = {"prefix": key, "input": i, "cachedInput": c,
+                       "output": o, "estimate": False}
+
+    for prefix, key in OPENAI_EXCEPTIONS:
+        if prefix in openai:
+            continue
         m = lite.get(key)
         i = per_million(m, "input_cost_per_token") if m else None
         o = per_million(m, "output_cost_per_token") if m else None
         c = per_million(m, "cache_read_input_token_cost") if m else None
-        if i and o:
-            openai[prefix] = {"prefix": prefix, "input": i, "cachedInput": c if c is not None else clean(0.1 * i),
+        if i and c and o and c <= i:
+            openai[prefix] = {"prefix": prefix, "input": i, "cachedInput": c,
                               "output": o, "estimate": False}
         elif prefix in cur_openai:
             print(f"  warn: {prefix}: no usable prices upstream ({key}) — kept current values")
@@ -123,31 +142,35 @@ def main():
             print(f"  warn: {prefix}: no upstream prices and no current row — skipped")
 
     # ---- sanity band vs the committed file (estimates are exempt) ----
-    # A brand-new prefix has no exact committed counterpart, so band-check it
-    # against its longest committed FAMILY prefix (the app matches longest-prefix
-    # too). This catches a unit-typo'd LiteLLM price (e.g. 1000x) on a newly
-    # auto-discovered dated Claude model, which would otherwise auto-ship.
-    committed = {**cur_claude, **cur_openai}
-    def family(prefix):
+    # Existing rows retain the 2x change guard. New Claude snapshots also check
+    # their committed family fallback; new OpenAI ids are distinct tiers, so a
+    # family ratio would reject legitimate mini/nano/etc. prices.
+    def family(prefix, committed):
         best = None
         for p, r in committed.items():
             if prefix.startswith(p) and not r.get("estimate") and (best is None or len(p) > len(best[0])):
                 best = (p, r)
         return best[1] if best else None
-    for prefix, row in list(claude.items()) + list(openai.items()):
-        old = committed.get(prefix)
-        via = "prior"
-        if old is None or old.get("estimate"):
-            old, via = family(prefix), "family"
-        if not old:
-            print(f"  warn: {prefix}: new prefix with no committed family — can't sanity-check, admitting")
-            continue
-        for f in ("input", "output"):
-            if not (1 / MAX_RATIO <= row[f] / old[f] <= MAX_RATIO):
-                sys.exit(f"error: {prefix} {f} = {row[f]} vs {via} {old[f]} (>{MAX_RATIO}x) — review manually")
+
+    def check_changes(rows, committed, family_fallback):
+        for prefix, row in rows.items():
+            old = committed.get(prefix)
+            via = "prior"
+            if family_fallback and (old is None or old.get("estimate")):
+                old, via = family(prefix, committed), "family"
+            if not old:
+                reason = "no committed family" if family_fallback else "new model id"
+                print(f"  warn: {prefix}: {reason} — admitting after structural checks")
+                continue
+            for f in ("input", "output"):
+                if not (1 / MAX_RATIO <= row[f] / old[f] <= MAX_RATIO):
+                    sys.exit(f"error: {prefix} {f} = {row[f]} vs {via} {old[f]} (>{MAX_RATIO}x) — review manually")
+
+    check_changes(claude, cur_claude, family_fallback=True)
+    check_changes(openai, cur_openai, family_fallback=False)
 
     new_claude = sorted(claude.values(), key=lambda r: r["prefix"])
-    new_openai = [openai[p] for p, _ in OPENAI_ROWS if p in openai]
+    new_openai = sorted(openai.values(), key=lambda r: r["prefix"])
     if new_claude == current.get("claude") and new_openai == current.get("openai"):
         print("pricing.json unchanged")
         return
@@ -155,7 +178,8 @@ def main():
     out = {
         "version": 1,
         "asOf": datetime.now(timezone.utc).date().isoformat(),
-        "comment": "Whir model price table ($/1M tokens), prefix-matched (longest wins); "
+        "comment": "Whir model price table ($/1M tokens); Claude family-prefix matched, "
+                   "OpenAI exact-id matched with dated-snapshot fallback; "
                    "fetched daily by the app. Auto-synced from LiteLLM's "
                    "model_prices_and_context_window.json by scripts/sync_pricing.py — "
                    "edit that script, not this file. Claude cache multipliers are fixed "

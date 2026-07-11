@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "asOf": "2026-07-07",
-  "comment": "Whir model price table ($/1M tokens), prefix-matched (longest wins); fetched daily by the app. Auto-synced from LiteLLM's model_prices_and_context_window.json by scripts/sync_pricing.py \u2014 edit that script, not this file. Claude cache multipliers are fixed in code: read 0.1x input, write-5m 1.25x, write-1h 2x.",
+  "asOf": "2026-07-11",
+  "comment": "Whir model price table ($/1M tokens); Claude family-prefix matched, OpenAI exact-id matched with dated-snapshot fallback; fetched daily by the app. Auto-synced from LiteLLM's model_prices_and_context_window.json by scripts/sync_pricing.py \u2014 edit that script, not this file. Claude cache multipliers are fixed in code: read 0.1x input, write-5m 1.25x, write-1h 2x.",
   "claude": [
     {
       "prefix": "claude-3-7-sonnet-20250219",
@@ -131,10 +131,206 @@
   ],
   "openai": [
     {
-      "prefix": "gpt-5.5",
-      "input": 5,
+      "prefix": "gpt-4.1",
+      "input": 2,
       "cachedInput": 0.5,
-      "output": 30,
+      "output": 8,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-4.1-2025-04-14",
+      "input": 2,
+      "cachedInput": 0.5,
+      "output": 8,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-4.1-mini",
+      "input": 0.4,
+      "cachedInput": 0.1,
+      "output": 1.6,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-4.1-mini-2025-04-14",
+      "input": 0.4,
+      "cachedInput": 0.1,
+      "output": 1.6,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-4.1-nano",
+      "input": 0.1,
+      "cachedInput": 0.025,
+      "output": 0.4,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-4.1-nano-2025-04-14",
+      "input": 0.1,
+      "cachedInput": 0.025,
+      "output": 0.4,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-4o",
+      "input": 2.5,
+      "cachedInput": 1.25,
+      "output": 10,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-4o-2024-08-06",
+      "input": 2.5,
+      "cachedInput": 1.25,
+      "output": 10,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-4o-2024-11-20",
+      "input": 2.5,
+      "cachedInput": 1.25,
+      "output": 10,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-4o-mini",
+      "input": 0.15,
+      "cachedInput": 0.075,
+      "output": 0.6,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-4o-mini-2024-07-18",
+      "input": 0.15,
+      "cachedInput": 0.075,
+      "output": 0.6,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5",
+      "input": 1.25,
+      "cachedInput": 0.125,
+      "output": 10,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5-2025-08-07",
+      "input": 1.25,
+      "cachedInput": 0.125,
+      "output": 10,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5-chat",
+      "input": 1.25,
+      "cachedInput": 0.125,
+      "output": 10,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5-chat-latest",
+      "input": 1.25,
+      "cachedInput": 0.125,
+      "output": 10,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5-mini",
+      "input": 0.25,
+      "cachedInput": 0.025,
+      "output": 2,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5-mini-2025-08-07",
+      "input": 0.25,
+      "cachedInput": 0.025,
+      "output": 2,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5-nano",
+      "input": 0.05,
+      "cachedInput": 0.005,
+      "output": 0.4,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5-nano-2025-08-07",
+      "input": 0.05,
+      "cachedInput": 0.005,
+      "output": 0.4,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.1",
+      "input": 1.25,
+      "cachedInput": 0.125,
+      "output": 10,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.1-2025-11-13",
+      "input": 1.25,
+      "cachedInput": 0.125,
+      "output": 10,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.1-chat-latest",
+      "input": 1.25,
+      "cachedInput": 0.125,
+      "output": 10,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.2",
+      "input": 1.75,
+      "cachedInput": 0.175,
+      "output": 14,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.2-2025-12-11",
+      "input": 1.75,
+      "cachedInput": 0.175,
+      "output": 14,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.2-chat-latest",
+      "input": 1.75,
+      "cachedInput": 0.175,
+      "output": 14,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.3-chat-latest",
+      "input": 1.75,
+      "cachedInput": 0.175,
+      "output": 14,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.3-codex-spark",
+      "input": 0.5,
+      "cachedInput": 0.05,
+      "output": 4,
+      "estimate": true
+    },
+    {
+      "prefix": "gpt-5.4",
+      "input": 2.5,
+      "cachedInput": 0.25,
+      "output": 15,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.4-2026-03-05",
+      "input": 2.5,
+      "cachedInput": 0.25,
+      "output": 15,
       "estimate": false
     },
     {
@@ -145,18 +341,67 @@
       "estimate": false
     },
     {
-      "prefix": "gpt-5.4",
+      "prefix": "gpt-5.4-mini-2026-03-17",
+      "input": 0.75,
+      "cachedInput": 0.075,
+      "output": 4.5,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.4-nano",
+      "input": 0.2,
+      "cachedInput": 0.02,
+      "output": 1.25,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.4-nano-2026-03-17",
+      "input": 0.2,
+      "cachedInput": 0.02,
+      "output": 1.25,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.5",
+      "input": 5,
+      "cachedInput": 0.5,
+      "output": 30,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.5-2026-04-23",
+      "input": 5,
+      "cachedInput": 0.5,
+      "output": 30,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.6",
+      "input": 5,
+      "cachedInput": 0.5,
+      "output": 30,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.6-luna",
+      "input": 1,
+      "cachedInput": 0.1,
+      "output": 6,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.6-sol",
+      "input": 5,
+      "cachedInput": 0.5,
+      "output": 30,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.6-terra",
       "input": 2.5,
       "cachedInput": 0.25,
       "output": 15,
       "estimate": false
-    },
-    {
-      "prefix": "gpt-5.3-codex-spark",
-      "input": 0.5,
-      "cachedInput": 0.05,
-      "output": 4,
-      "estimate": true
     }
   ]
 }
