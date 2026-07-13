@@ -45,7 +45,11 @@ public struct FileAgg: Codable {
     public var mtime: Double                     // last-seen mtime; detects same-length in-place edits
     public var offset: Int                      // byte offset after last newline-terminated line processed
     public var models: [String: ModelTokens]
-    public var costByProject: [String: Double]  // Claude only (scan-time pricing; cache invalidates on pricing change)
+    /// Claude only: project -> model -> tokens. Broken out by model (not just
+    /// summed) because cost depends on which model each token belongs to;
+    /// cost itself is never stored here, only computed at read time — so a
+    /// pricing change needs no rescan.
+    public var tokensByProject: [String: [String: ModelTokens]]
     public var seenRequestIDs: Set<String>      // Claude dedup
     public var lastModel: String?               // Codex: carry turn_context model across a resume
     public var lastTokenFP: String?             // Codex: drop consecutive duplicate token_count snapshots
@@ -53,7 +57,7 @@ public struct FileAgg: Codable {
     public init(provider: Provider) {
         self.provider = provider
         inode = ""; mtime = 0; offset = 0
-        models = [:]; costByProject = [:]; seenRequestIDs = []; lastModel = nil; lastTokenFP = nil
+        models = [:]; tokensByProject = [:]; seenRequestIDs = []; lastModel = nil; lastTokenFP = nil
     }
 }
 
@@ -130,7 +134,7 @@ public struct UsageReport {
 
     public static func build(from aggs: [String: FileAgg]) -> UsageReport {
         var tokensByKey: [String: (Provider, String, ModelTokens)] = [:]
-        var proj: [String: Double] = [:]
+        var projModelTokens: [String: [String: ModelTokens]] = [:]   // project -> model -> tokens (Claude only)
         for fa in aggs.values {
             for (model, t) in fa.models {
                 let key = fa.provider.rawValue + "|" + model
@@ -140,11 +144,19 @@ public struct UsageReport {
                     tokensByKey[key] = (fa.provider, model, t)
                 }
             }
-            for (p, c) in fa.costByProject { proj[p, default: 0] += c }
+            for (p, byModel) in fa.tokensByProject {
+                var acc = projModelTokens[p] ?? [:]
+                for (model, t) in byModel { acc[model] = (acc[model] ?? ModelTokens()) + t }
+                projModelTokens[p] = acc
+            }
         }
         var r = UsageReport()
         r.filesScanned = aggs.count
-        r.costByProject = proj
+        // Cost is pure arithmetic over already-in-memory tokens — computed here,
+        // fresh, under whatever price table is active right now.
+        r.costByProject = projModelTokens.mapValues { byModel in
+            byModel.reduce(0.0) { $0 + WhirCore.cost(provider: .claude, model: $1.key, tokens: $1.value).usd }
+        }
         for (_, v) in tokensByKey {
             let (usd, priced, est) = WhirCore.cost(provider: v.0, model: v.1, tokens: v.2)
             r.models.append(ModelLine(provider: v.0, model: v.1, tokens: v.2,

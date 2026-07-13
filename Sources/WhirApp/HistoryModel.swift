@@ -74,8 +74,8 @@ final class HistoryModel {
         building = true
         scanTask = Task.detached(priority: .userInitiated) {
             let roots = FolderAccess.currentRoots()
-            let (s, status) = FolderAccess.withAccess { () -> (HistorySnapshot, RootsStatus) in
-                (HistoryEngine().refresh(claudeProjects: roots.claudeProjects, codexSessions: roots.codexSessions),
+            let (s, status) = await FolderAccess.withAccess { () async -> (HistorySnapshot, RootsStatus) in
+                (await HistoryEngine().refresh(claudeProjects: roots.claudeProjects, codexSessions: roots.codexSessions),
                  rootsStatus(claudeProjects: roots.claudeProjects, codexSessions: roots.codexSessions))
             }
             await MainActor.run {

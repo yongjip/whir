@@ -48,14 +48,14 @@ enum FolderAccess {
     }
 
     /// Run `body` with security-scoped access to the granted folders active.
-    static func withAccess<T>(_ body: () -> T) -> T {
-        guard isSandboxed else { return body() }
+    static func withAccess<T>(_ body: () async -> T) async -> T {
+        guard isSandboxed else { return await body() }
         let urls = [resolve(claudeID), resolve(codexID)].compactMap { $0 }
         // Only stop the scopes whose start actually succeeded — an unbalanced
         // stop corrupts the per-resource access count (Apple's contract).
         let started = urls.filter { $0.startAccessingSecurityScopedResource() }
         defer { started.forEach { $0.stopAccessingSecurityScopedResource() } }
-        return body()
+        return await body()
     }
 
     private static func resolve(_ id: String) -> URL? {

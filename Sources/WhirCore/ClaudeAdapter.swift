@@ -9,7 +9,7 @@ public struct ClaudeAdapter {
 
     /// Incrementally update `aggs` in place: reads only bytes appended since the
     /// last scan, resets a file's aggregate if its identity changed or it shrank.
-    public func update(_ aggs: inout [String: FileAgg], window: Window) {
+    public func update(_ aggs: inout [String: FileAgg], window: Window) async {
         // Unreadable root (missing / access lost) → leave cached aggs untouched
         // rather than wiping them (which would force a full rescan on recovery).
         guard let found = files(under: root, suffix: ".jsonl") else { return }
@@ -19,6 +19,7 @@ public struct ClaudeAdapter {
             aggs[path] = nil
         }
 
+        var lineCount = 0
         for path in present {
             guard let id = fileIdentity(path) else { continue }
             var fa = aggs[path]
@@ -54,8 +55,12 @@ public struct ClaudeAdapter {
                     let t = claudeTokens(usage)
                     fa!.models[model] = (fa!.models[model] ?? ModelTokens()) + t
                     let proj = (obj.str("cwd").map { ($0 as NSString).lastPathComponent }) ?? "?"
-                    fa!.costByProject[proj, default: 0] += cost(provider: .claude, model: model, tokens: t).usd
+                    var byModel = fa!.tokensByProject[proj] ?? [:]
+                    byModel[model] = (byModel[model] ?? ModelTokens()) + t
+                    fa!.tokensByProject[proj] = byModel
                 }
+                lineCount += 1
+                if lineCount % ScanYield.every == 0 { await Task.yield() }
             }
             fa!.offset = reader.safeOffset
             fa!.mtime = id.mtime

@@ -28,7 +28,7 @@ final class IncrementalTests: XCTestCase {
     }
 
     // Incremental (read 1 line, append 1, read again) must equal a from-scratch scan.
-    func testClaudeIncrementalEqualsFull() {
+    func testClaudeIncrementalEqualsFull() async {
         let root = tmpDir(); defer { try? FileManager.default.removeItem(atPath: root) }
         let proj = root + "/proj"; try! FileManager.default.createDirectory(atPath: proj, withIntermediateDirectories: true)
         let file = proj + "/a.jsonl"
@@ -37,13 +37,13 @@ final class IncrementalTests: XCTestCase {
 
         var aggs: [String: FileAgg] = [:]
         let ad = ClaudeAdapter(root: root)
-        ad.update(&aggs, window: .all)
+        await ad.update(&aggs, window: .all)
         append(claude(req: "r2", model: "claude-opus-4-8", input: 200, output: 60), to: file)
-        ad.update(&aggs, window: .all)
+        await ad.update(&aggs, window: .all)
         let incremental = UsageReport.build(from: aggs)
 
         var fresh: [String: FileAgg] = [:]
-        ClaudeAdapter(root: root).update(&fresh, window: .all)
+        await ClaudeAdapter(root: root).update(&fresh, window: .all)
         let full = UsageReport.build(from: fresh)
 
         XCTAssertEqual(incremental.totalCost, full.totalCost, accuracy: 1e-9)
@@ -53,7 +53,7 @@ final class IncrementalTests: XCTestCase {
     }
 
     // A retried requestId split across the resume boundary is counted once.
-    func testClaudeDedupAcrossResume() {
+    func testClaudeDedupAcrossResume() async {
         let root = tmpDir(); defer { try? FileManager.default.removeItem(atPath: root) }
         let proj = root + "/proj"; try! FileManager.default.createDirectory(atPath: proj, withIntermediateDirectories: true)
         let file = proj + "/a.jsonl"
@@ -62,16 +62,16 @@ final class IncrementalTests: XCTestCase {
 
         var aggs: [String: FileAgg] = [:]
         let ad = ClaudeAdapter(root: root)
-        ad.update(&aggs, window: .all)
+        await ad.update(&aggs, window: .all)
         append(dup, to: file)            // same requestId again
-        ad.update(&aggs, window: .all)
+        await ad.update(&aggs, window: .all)
 
         let line = UsageReport.build(from: aggs).models.first { $0.provider == .claude }!
         XCTAssertEqual(line.tokens.input, 100, "duplicate requestId must not double-count")
     }
 
     // Codex model from turn_context must carry over when the resumed bytes have none.
-    func testCodexModelCarriesAcrossResume() {
+    func testCodexModelCarriesAcrossResume() async {
         let root = tmpDir(); defer { try? FileManager.default.removeItem(atPath: root) }
         let sessions = root + "/sessions"
         let dateDir = sessions + "/2026/06/15"
@@ -82,9 +82,9 @@ final class IncrementalTests: XCTestCase {
 
         var aggs: [String: FileAgg] = [:]
         let ad = CodexAdapter(root: sessions)
-        ad.update(&aggs, window: .all)
+        await ad.update(&aggs, window: .all)
         append(codexTok(input: 2000, cached: 500, output: 80), to: file)   // no new turn_context
-        ad.update(&aggs, window: .all)
+        await ad.update(&aggs, window: .all)
 
         let r = UsageReport.build(from: aggs)
         XCTAssertNil(r.models.first { $0.model == "unknown" }, "model must carry across resume")
@@ -94,7 +94,7 @@ final class IncrementalTests: XCTestCase {
 
     // A complete record without its trailing newline yet (mid-write) must not be
     // counted now and again once the newline arrives. (Codex has no requestId dedup.)
-    func testUnterminatedLineNotDoubleCounted() {
+    func testUnterminatedLineNotDoubleCounted() async {
         let root = tmpDir(); defer { try? FileManager.default.removeItem(atPath: root) }
         let sessions = root + "/sessions"
         let dateDir = sessions + "/2026/06/15"
@@ -106,7 +106,7 @@ final class IncrementalTests: XCTestCase {
 
         var aggs: [String: FileAgg] = [:]
         let ad = CodexAdapter(root: sessions)
-        ad.update(&aggs, window: .all)
+        await ad.update(&aggs, window: .all)
         // the unterminated token_count must not have been counted yet
         XCTAssertNil(UsageReport.build(from: aggs).models.first { $0.model == "gpt-5.5" })
 
@@ -114,14 +114,14 @@ final class IncrementalTests: XCTestCase {
         append("", to: file)                                  // adds the missing "\n"
         let fh = FileHandle(forWritingAtPath: file)!
         fh.seekToEndOfFile(); fh.write(Data(codexTok(input: 2000, cached: 0, output: 0).utf8)); try? fh.close()
-        ad.update(&aggs, window: .all)
+        await ad.update(&aggs, window: .all)
 
         let line = UsageReport.build(from: aggs).models.first { $0.model == "gpt-5.5" }
         XCTAssertEqual(line?.tokens.input, 1000, "completed record counted exactly once; pending one not yet")
     }
 
     // In-place edit preserving byte length (same inode, same size, new mtime) must re-read.
-    func testInPlaceSameLengthEditReread() {
+    func testInPlaceSameLengthEditReread() async {
         let root = tmpDir(); defer { try? FileManager.default.removeItem(atPath: root) }
         let proj = root + "/proj"; try! FileManager.default.createDirectory(atPath: proj, withIntermediateDirectories: true)
         let file = proj + "/a.jsonl"
@@ -131,29 +131,29 @@ final class IncrementalTests: XCTestCase {
         try! (a + "\n").write(toFile: file, atomically: true, encoding: .utf8)
 
         var aggs: [String: FileAgg] = [:]
-        ClaudeAdapter(root: root).update(&aggs, window: .all)
+        await ClaudeAdapter(root: root).update(&aggs, window: .all)
         // overwrite in place (same inode, same size, newer mtime)
         let fh = FileHandle(forWritingAtPath: file)!
         fh.seek(toFileOffset: 0); fh.write(Data((b + "\n").utf8)); try? fh.close()
-        ClaudeAdapter(root: root).update(&aggs, window: .all)
+        await ClaudeAdapter(root: root).update(&aggs, window: .all)
 
         let line = UsageReport.build(from: aggs).models.first { $0.provider == .claude }!
         XCTAssertEqual(line.tokens.input, 200, "in-place same-length edit must reset, not keep stale or double")
     }
 
     // Truncation/rotation (smaller file, new identity) re-reads from 0 without double-counting.
-    func testRewriteResetsFile() {
+    func testRewriteResetsFile() async {
         let root = tmpDir(); defer { try? FileManager.default.removeItem(atPath: root) }
         let proj = root + "/proj"; try! FileManager.default.createDirectory(atPath: proj, withIntermediateDirectories: true)
         let file = proj + "/a.jsonl"
         try! (claude(req: "r1", model: "claude-opus-4-8", input: 999, output: 1) + "\n")
             .write(toFile: file, atomically: true, encoding: .utf8)
         var aggs: [String: FileAgg] = [:]
-        ClaudeAdapter(root: root).update(&aggs, window: .all)
+        await ClaudeAdapter(root: root).update(&aggs, window: .all)
         // overwrite with a smaller, different file
         try! (claude(req: "r9", model: "claude-opus-4-8", input: 5, output: 5) + "\n")
             .write(toFile: file, atomically: true, encoding: .utf8)
-        ClaudeAdapter(root: root).update(&aggs, window: .all)
+        await ClaudeAdapter(root: root).update(&aggs, window: .all)
         let line = UsageReport.build(from: aggs).models.first { $0.provider == .claude }!
         XCTAssertEqual(line.tokens.input, 5, "rewritten file must reset, not accumulate")
     }

@@ -16,12 +16,14 @@ public struct UsageEngine {
     @discardableResult
     public func refresh(window: Window,
                         claudeProjects: String = homePath(".claude/projects"),
-                        codexSessions: String? = nil) -> UsageReport {
-        let pricingAsOf = Pricing.asOf   // capture at start; see ScanCache.save
+                        codexSessions: String? = nil) async -> UsageReport {
         var aggs = ScanCache.load(window: window) ?? [:]
-        ClaudeAdapter(root: claudeProjects).update(&aggs, window: window)
-        CodexAdapter(root: codexSessions).update(&aggs, window: window)
-        ScanCache.save(aggs, window: window, pricingAsOf: pricingAsOf)
+        await ClaudeAdapter(root: claudeProjects).update(&aggs, window: window)
+        await CodexAdapter(root: codexSessions).update(&aggs, window: window)
+        ScanCache.save(aggs, window: window)
+        // Hand the scan's transient allocation burst back to the OS immediately,
+        // rather than leaving it resident-but-reclaimable for macOS to notice later.
+        malloc_zone_pressure_relief(nil, 0)
         return UsageReport.build(from: aggs)
     }
 }

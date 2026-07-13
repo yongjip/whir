@@ -16,7 +16,7 @@ final class CodexForkTests: XCTestCase {
 
     // A forked session replays the parent's token_count history; that inherited
     // prefix must not be double-counted.
-    func testForkPrefixDeduped() {
+    func testForkPrefixDeduped() async {
         let dir = NSTemporaryDirectory() + "whir-fork-" + UUID().uuidString
         try! FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(atPath: dir) }
@@ -39,7 +39,7 @@ final class CodexForkTests: XCTestCase {
         ])
 
         var aggs: [String: FileAgg] = [:]
-        CodexAdapter(root: dir).update(&aggs, window: .all)
+        await CodexAdapter(root: dir).update(&aggs, window: .all)
         let (i, c, o) = sum(aggs)
         // deduped: parent 300/150/30 + fork's NEW 500/0/50 only (replay skipped).
         XCTAssertEqual(i, 800, "input should be 800 (1100 would mean the fork replay was double-counted)")
@@ -48,7 +48,7 @@ final class CodexForkTests: XCTestCase {
     }
 
     // Without a discoverable parent, nothing is skipped (no false dedup).
-    func testNonForkNotSkipped() {
+    func testNonForkNotSkipped() async {
         let dir = NSTemporaryDirectory() + "whir-fork-" + UUID().uuidString
         try! FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(atPath: dir) }
@@ -60,7 +60,7 @@ final class CodexForkTests: XCTestCase {
             tc("2026-06-01T00:00:03.000Z", 200, 100, 20),
         ])
         var aggs: [String: FileAgg] = [:]
-        CodexAdapter(root: dir).update(&aggs, window: .all)
+        await CodexAdapter(root: dir).update(&aggs, window: .all)
         let (i, c, o) = sum(aggs)
         XCTAssertEqual(i, 300); XCTAssertEqual(c, 150); XCTAssertEqual(o, 30)
     }
@@ -68,7 +68,7 @@ final class CodexForkTests: XCTestCase {
     // Codex sometimes re-emits the SAME token_count snapshot back-to-back; that
     // consecutive duplicate must be counted once. A later event with identical
     // values but a different timestamp is a real turn and must NOT be dropped.
-    func testConsecutiveDuplicateSnapshotDeduped() {
+    func testConsecutiveDuplicateSnapshotDeduped() async {
         let dir = NSTemporaryDirectory() + "whir-fork-" + UUID().uuidString
         try! FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(atPath: dir) }
@@ -82,7 +82,7 @@ final class CodexForkTests: XCTestCase {
             tc("2026-06-01T00:00:04.000Z", 100, 50, 10),   // same values, new ts → real turn, keep
         ])
         var aggs: [String: FileAgg] = [:]
-        CodexAdapter(root: dir).update(&aggs, window: .all)
+        await CodexAdapter(root: dir).update(&aggs, window: .all)
         let (i, c, o) = sum(aggs)
         XCTAssertEqual(i, 400, "400 = 100 + 200 + 100; 500 would mean the duplicate wasn't dropped")
         XCTAssertEqual(c, 200)

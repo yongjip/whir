@@ -16,7 +16,7 @@ public struct CodexAdapter {
         }
     }
 
-    public func update(_ aggs: inout [String: FileAgg], window: Window) {
+    public func update(_ aggs: inout [String: FileAgg], window: Window) async {
         var roots = [root]
         let archived = (root as NSString).deletingLastPathComponent + "/archived_sessions"
         if FileManager.default.fileExists(atPath: archived) { roots.append(archived) }
@@ -43,6 +43,7 @@ public struct CodexAdapter {
             }
         }
 
+        var lineCount = 0
         for path in present {
             guard let id = fileIdentity(path) else { continue }
             var fa = aggs[path]
@@ -67,9 +68,9 @@ public struct CodexAdapter {
                 let isCtx = raw.contains(LineNeedle.turnContext)
                 let isTok = raw.contains(LineNeedle.tokenCount)
                 if !isCtx && !isTok { continue }
-                // Drain the per-line JSONSerialization garbage each iteration —
-                // without a pool it accumulates across the whole multi-GB scan
-                // (this job has no await, so the task pool never drains mid-scan).
+                // Drain the per-line JSONSerialization garbage each iteration — the
+                // periodic yield below drains the task's own pool, but this one
+                // keeps each line's garbage from surviving to the next yield point.
                 autoreleasepool {
                     guard let obj = jsonObject(raw.string) else { return }
 
@@ -95,6 +96,8 @@ public struct CodexAdapter {
                     t.input = tup[0]; t.cachedInput = tup[1]; t.output = tup[2]
                     fa!.models[model] = (fa!.models[model] ?? ModelTokens()) + t
                 }
+                lineCount += 1
+                if lineCount % ScanYield.every == 0 { await Task.yield() }
             }
             // Caught the fork mid-replay: leave the cursor at 0 (drop the partial
             // agg) so the next scan re-reads with a fresh skipper. Nothing new was

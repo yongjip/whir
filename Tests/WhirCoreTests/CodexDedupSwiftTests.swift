@@ -97,7 +97,7 @@ struct CodexScenario: Sendable, CustomTestStringConvertible {
 @Suite("Codex dedup & fork invariants")
 struct CodexDedupSwiftTests {
     @Test("aggregated tokens match expected", arguments: CodexScenario.all)
-    func aggregates(_ s: CodexScenario) throws {
+    func aggregates(_ s: CodexScenario) async throws {
         let dir = NSTemporaryDirectory() + "whir-swifttest-" + UUID().uuidString
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(atPath: dir) }
@@ -106,7 +106,7 @@ struct CodexDedupSwiftTests {
         }
 
         var aggs: [String: FileAgg] = [:]
-        CodexAdapter(root: dir).update(&aggs, window: .all)
+        await CodexAdapter(root: dir).update(&aggs, window: .all)
 
         var i = 0, c = 0, o = 0
         for fa in aggs.values { for t in fa.models.values { i += t.input; c += t.cachedInput; o += t.output } }

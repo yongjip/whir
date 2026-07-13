@@ -4,8 +4,10 @@ import XCTest
 final class HistoryTests: XCTestCase {
 
     private func tok(input: Int) -> ModelTokens { var t = ModelTokens(); t.input = input; return t }
-    private func bd(_ models: [String: ModelTokens], _ projects: [String: Double] = [:]) -> BucketData {
-        BucketData(models: models, projects: projects.mapValues { ProjectAgg(cost: $0, tokens: ModelTokens()) })
+    /// `projects` maps project name -> its per-model token sums (cost is derived
+    /// at read time from these, never stored — see ProjectAgg).
+    private func bd(_ models: [String: ModelTokens], _ projects: [String: [String: ModelTokens]] = [:]) -> BucketData {
+        BucketData(models: models, projects: projects.mapValues { ProjectAgg(models: $0) })
     }
 
     // Rollup: hour buckets collapse correctly to hour / day / month.
@@ -58,9 +60,11 @@ final class HistoryTests: XCTestCase {
     // merging projects across providers.
     func testBucketDetail() {
         var c = HourAgg(provider: .claude)
-        c.buckets["2026-06-15 09"] = bd(["claude-opus-4-8": tok(input: 1_000_000)], ["backend": 5])
+        c.buckets["2026-06-15 09"] = bd(["claude-opus-4-8": tok(input: 1_000_000)],
+                                        ["backend": ["claude-opus-4-8": tok(input: 1_000_000)]])   // $5
         var x = HourAgg(provider: .codex)
-        x.buckets["2026-06-15 14"] = bd(["gpt-5.5": tok(input: 1_000_000)], ["backend": 5]) // same day, diff hour
+        x.buckets["2026-06-15 14"] = bd(["gpt-5.5": tok(input: 1_000_000)],
+                                        ["backend": ["gpt-5.5": tok(input: 1_000_000)]])   // $5, same day diff hour
 
         let detail = buildDetail(["c": c, "x": x], "2026-06-15", .day)
         XCTAssertEqual(detail.models.count, 2)
@@ -94,7 +98,7 @@ final class HistoryTests: XCTestCase {
     }
 
     // End-to-end: two Claude events in different hours bucket into two hour points.
-    func testClaudeAdapterBucketsByHour() {
+    func testClaudeAdapterBucketsByHour() async {
         let root = NSTemporaryDirectory() + "urhist-" + UUID().uuidString
         let proj = root + "/proj"
         try! FileManager.default.createDirectory(atPath: proj, withIntermediateDirectories: true)
@@ -111,7 +115,7 @@ final class HistoryTests: XCTestCase {
             .write(toFile: file, atomically: true, encoding: .utf8)
 
         var aggs: [String: HourAgg] = [:]
-        ClaudeHistory.update(&aggs, root: root, keyer: HourKeyer())
+        await ClaudeHistory.update(&aggs, root: root, keyer: HourKeyer())
         XCTAssertEqual(buildSeries(aggs, .hour).count, 2)
         XCTAssertEqual(buildSeries(aggs, .day).count, 1)
         // and the day's drilldown attributes to the project "p"

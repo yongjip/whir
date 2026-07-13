@@ -37,11 +37,11 @@ public struct BucketDetail {
     public let projects: [ProjectRow]
 }
 
-/// Per-project cost + token sums (cost at scan-time pricing; the history cache
-/// invalidates on a Pricing.asOf change, so it stays consistent).
+/// Per-project token sums, broken out by model — cost depends on which model
+/// each token belongs to, so it's computed at read time and never stored here
+/// (a pricing change is reflected immediately, with no rescan needed).
 struct ProjectAgg: Codable {
-    var cost: Double = 0
-    var tokens: ModelTokens = ModelTokens()
+    var models: [String: ModelTokens] = [:]
 }
 
 /// What we store for one bucket: model token sums + per-project cost/tokens.
@@ -87,13 +87,12 @@ private func projectName(_ cwd: String?) -> String {
     return (cwd as NSString).lastPathComponent
 }
 
-private func add(_ agg: inout HourAgg, hour: String, provider: Provider, model: String,
+private func add(_ agg: inout HourAgg, hour: String, model: String,
                  project: String, tokens t: ModelTokens) {
     var bd = agg.buckets[hour] ?? BucketData()
     bd.models[model] = (bd.models[model] ?? ModelTokens()) + t
     var pa = bd.projects[project] ?? ProjectAgg()
-    pa.cost += cost(provider: provider, model: model, tokens: t).usd
-    pa.tokens = pa.tokens + t
+    pa.models[model] = (pa.models[model] ?? ModelTokens()) + t
     bd.projects[project] = pa
     agg.buckets[hour] = bd
 }
@@ -101,10 +100,11 @@ private func add(_ agg: inout HourAgg, hour: String, provider: Provider, model: 
 // MARK: - all-time, hour-bucketed adapters (share the cursor/identity logic of the totals adapters)
 
 enum ClaudeHistory {
-    static func update(_ aggs: inout [String: HourAgg], root: String, keyer: HourKeyer) {
+    static func update(_ aggs: inout [String: HourAgg], root: String, keyer: HourKeyer) async {
         guard let found = files(under: root, suffix: ".jsonl") else { return }   // unreadable → keep cache
         let present = Set(found)
         for (path, a) in aggs where a.provider == .claude && !present.contains(path) { aggs[path] = nil }
+        var lineCount = 0
         for path in present {
             guard let id = fileIdentity(path) else { continue }
             var fa = aggs[path]
@@ -126,9 +126,11 @@ enum ClaudeHistory {
                     guard let message = obj.dict("message"), let usage = message.dict("usage") else { return }
                     let model = message.str("model") ?? "unknown"
                     if Pricing.excludedModels.contains(model) { return }
-                    add(&fa!, hour: keyer.key(obj.str("timestamp")), provider: .claude, model: model,
+                    add(&fa!, hour: keyer.key(obj.str("timestamp")), model: model,
                         project: projectName(obj.str("cwd")), tokens: claudeTokens(usage))
                 }
+                lineCount += 1
+                if lineCount % ScanYield.every == 0 { await Task.yield() }
             }
             fa!.offset = reader.safeOffset; fa!.mtime = id.mtime
             aggs[path] = fa
@@ -137,7 +139,7 @@ enum ClaudeHistory {
 }
 
 enum CodexHistory {
-    static func update(_ aggs: inout [String: HourAgg], root: String, keyer: HourKeyer) {
+    static func update(_ aggs: inout [String: HourAgg], root: String, keyer: HourKeyer) async {
         var roots = [root]
         let archived = (root as NSString).deletingLastPathComponent + "/archived_sessions"
         if FileManager.default.fileExists(atPath: archived) { roots.append(archived) }
@@ -151,6 +153,7 @@ enum CodexHistory {
             for (path, a) in aggs where a.provider == .codex && !present.contains(path) { aggs[path] = nil }
         }
 
+        var lineCount = 0
         for path in present {
             guard let id = fileIdentity(path) else { continue }
             var fa = aggs[path]
@@ -189,9 +192,11 @@ enum CodexHistory {
                     if Pricing.excludedModels.contains(model) { return }
                     var t = ModelTokens()
                     t.input = tup[0]; t.cachedInput = tup[1]; t.output = tup[2]
-                    add(&fa!, hour: keyer.key(obj.str("timestamp")), provider: .codex, model: model,
+                    add(&fa!, hour: keyer.key(obj.str("timestamp")), model: model,
                         project: curProject ?? "?", tokens: t)
                 }
+                lineCount += 1
+                if lineCount % ScanYield.every == 0 { await Task.yield() }
             }
             // Caught mid-replay: re-read from 0 next time with a fresh skipper.
             if skipper?.stillSkipping == true { aggs[path] = nil; continue }
@@ -297,7 +302,8 @@ func buildGroupedSeries(_ aggs: [String: HourAgg], _ g: Granularity, _ by: Group
 /// Per-bucket model + project breakdown for one rolled-up bucket key.
 func buildDetail(_ aggs: [String: HourAgg], _ bucketKey: String, _ g: Granularity) -> BucketDetail {
     var modelTokens: [String: (provider: Provider, model: String, tokens: ModelTokens)] = [:]
-    var projects: [String: ProjectAgg] = [:]
+    var projectCost: [String: Double] = [:]
+    var projectTokens: [String: ModelTokens] = [:]
     var weekMemo: [String: (String, String)] = [:]
     for agg in aggs.values {
         for (hourKey, bd) in agg.buckets {
@@ -307,10 +313,13 @@ func buildDetail(_ aggs: [String: HourAgg], _ bucketKey: String, _ g: Granularit
                 if let ex = modelTokens[k] { modelTokens[k] = (ex.provider, ex.model, ex.tokens + t) }
                 else { modelTokens[k] = (agg.provider, model, t) }
             }
+            // Project cost is recomputed here, per (project, model) pair, under
+            // whatever price table is active right now — never stored.
             for (p, pa) in bd.projects {
-                var acc = projects[p] ?? ProjectAgg()
-                acc.cost += pa.cost; acc.tokens = acc.tokens + pa.tokens
-                projects[p] = acc
+                for (model, t) in pa.models {
+                    projectCost[p, default: 0] += cost(provider: agg.provider, model: model, tokens: t).usd
+                    projectTokens[p] = (projectTokens[p] ?? ModelTokens()) + t
+                }
             }
         }
     }
@@ -319,8 +328,8 @@ func buildDetail(_ aggs: [String: HourAgg], _ bucketKey: String, _ g: Granularit
         return BucketDetail.ModelRow(provider: $0.provider, model: $0.model,
                                      cost: c.usd, priced: c.priced, tokens: $0.tokens)
     }.sorted { $0.cost != $1.cost ? $0.cost > $1.cost : $0.tokens.total > $1.tokens.total }
-    let projectRows = projects.map {
-        BucketDetail.ProjectRow(project: $0.key, cost: $0.value.cost, tokens: $0.value.tokens)
+    let projectRows = projectTokens.map {
+        BucketDetail.ProjectRow(project: $0.key, cost: projectCost[$0.key] ?? 0, tokens: $0.value)
     }.sorted { $0.cost > $1.cost }
     return BucketDetail(total: modelRows.reduce(0) { $0 + $1.cost }, models: modelRows, projects: projectRows)
 }

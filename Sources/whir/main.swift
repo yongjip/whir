@@ -38,7 +38,7 @@ if args.contains("--history") {
     let g = Granularity(rawValue: flagValue("--by") ?? "day") ?? .day
     let last = flagValue("--last").flatMap { Int($0) }
     func money(_ v: Double) -> String { String(format: "$%8.2f", v) }
-    let snapshot = HistoryEngine().refresh()
+    let snapshot = await HistoryEngine().refresh()
 
     // Drilldown for one bucket: --detail <key>
     if let key = flagValue("--detail") {
@@ -88,4 +88,4 @@ var label = "This month (\(currentMonthKey()))"
 if args.contains("--all") { window = .all; label = "All time" }
 if let m = flagValue("--month") { window = .month(m); label = m }
 
-print(UsageEngine().refresh(window: window).render(windowLabel: label))
+print(await UsageEngine().refresh(window: window).render(windowLabel: label))

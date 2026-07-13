@@ -139,6 +139,14 @@ extension Dictionary where Key == String, Value == Any {
     }
 }
 
+// MARK: - cooperative scanning
+
+/// How many lines the scan loops process between `await Task.yield()` calls.
+/// Frequent enough to interleave with the scheduler/OS across a multi-GB scan
+/// (so a single cache-miss rescan doesn't run as one uninterrupted CPU burst),
+/// rare enough that yielding itself isn't overhead.
+enum ScanYield { static let every = 20_000 }
+
 // MARK: - filesystem
 
 /// Recursively walk a directory, yielding files whose name matches `suffix`.
