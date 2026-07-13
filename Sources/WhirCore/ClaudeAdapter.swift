@@ -70,8 +70,9 @@ public struct ClaudeAdapter {
                    !(obj.str("timestamp")?.hasPrefix(m) ?? false) { return }
 
                 if let rid = obj.str("requestId") {
-                    if fa.seenRequestIDs.contains(rid) { return }   // dedup retried requests
-                    fa.seenRequestIDs.insert(rid)
+                    let h = fnv1a64(rid)                            // stored as a stable hash, not the string
+                    if fa.seenRequestIDs.contains(h) { return }     // dedup retried requests
+                    fa.seenRequestIDs.insert(h)
                 }
                 guard let message = obj.dict("message"), let usage = message.dict("usage") else { return }
                 let model = message.str("model") ?? "unknown"

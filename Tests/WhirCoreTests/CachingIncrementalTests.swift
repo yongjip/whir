@@ -194,6 +194,16 @@ final class CachingIncrementalTests: XCTestCase {
         XCTAssertEqual(sumFiles(inc).0, sumFiles(full).0, "incremental must equal a full scan")
     }
 
+    // seenRequestIDs are persisted as FNV-1a hashes. The hash MUST be stable
+    // across launches (a cached hash from last week must match today's hash of
+    // the same requestId) — Swift's per-process-seeded Hasher would silently
+    // break dedup. Locked to reference vectors so a refactor can't drift.
+    func testRequestIDHashIsStableAcrossLaunches() {
+        XCTAssertEqual(fnv1a64(""), 0xcbf29ce484222325)
+        XCTAssertEqual(fnv1a64("a"), 0xaf63dc4c8601ec8c)
+        XCTAssertEqual(fnv1a64("req_011CSHoEeqs5C35K2UUqR7Fy"), 0x4136faf9e9d63155)
+    }
+
     // The parallel-scan kill switch (ScanConfig.parallelScanning = false, wired
     // to `defaults write com.whir.Whir scan.parallel -bool NO` and
     // WHIR_SERIAL_SCAN=1) must produce identical results through the same code

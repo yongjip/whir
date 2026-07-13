@@ -2,7 +2,7 @@ import Foundation
 
 /// All-time, hour-bucketed cache (separate from the menu-bar month cache).
 enum HistoryCache {
-    static let version = 7   // v7: ProjectAgg.cost removed — cost computed at read time, not scan time
+    static let version = 8   // v8: seenRequestIDs stored as stable FNV-1a hashes (v7: ProjectAgg.cost removed)
     private struct File: Codable { var version: Int; var aggs: [String: HourAgg] }
     private static func path() -> String {
         (ScanCache.directory() as NSString).appendingPathComponent("history.json")

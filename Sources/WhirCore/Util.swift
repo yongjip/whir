@@ -144,6 +144,18 @@ extension Dictionary where Key == String, Value == Any {
     }
 }
 
+// MARK: - stable hashing
+
+/// FNV-1a 64-bit — STABLE across launches (Swift's Hasher is per-process
+/// seeded and must never be persisted). Used to store request-ID hashes in
+/// the caches instead of full UUID strings; collisions are ~2^-64 per pair,
+/// negligible against tens of thousands of IDs.
+@inline(__always) func fnv1a64(_ s: String) -> UInt64 {
+    var h: UInt64 = 0xcbf29ce484222325
+    for b in s.utf8 { h = (h ^ UInt64(b)) &* 0x100000001b3 }
+    return h
+}
+
 // MARK: - cooperative scanning
 
 /// How many lines the scan loops process between `await Task.yield()` calls.

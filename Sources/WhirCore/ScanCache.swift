@@ -5,7 +5,7 @@ import Foundation
 /// Cost is derived from stored token sums at read time and never persisted, so
 /// a pricing change needs no rescan; `version` guards against schema changes.
 enum ScanCache {
-    static let version = 5   // v5: costByProject -> tokensByProject (cost computed at read time, not scan time)
+    static let version = 6   // v6: seenRequestIDs stored as stable FNV-1a hashes (v5: tokensByProject)
 
     private struct File: Codable {
         var version: Int

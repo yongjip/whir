@@ -57,7 +57,7 @@ struct HourAgg: Codable {
     var mtime = 0.0
     var offset = 0
     var buckets: [String: BucketData] = [:]   // localHourKey -> bucket
-    var seenRequestIDs: Set<String> = []
+    var seenRequestIDs: Set<UInt64> = []   // stable FNV-1a hashes, not strings
     var lastModel: String?
     var lastProject: String?
     var lastTokenFP: String?   // drop consecutive duplicate token_count snapshots
@@ -159,8 +159,9 @@ enum ClaudeHistory {
             autoreleasepool {
                 guard let obj = jsonObject(raw.string), obj.str("type") == "assistant" else { return }
                 if let rid = obj.str("requestId") {
-                    if fa.seenRequestIDs.contains(rid) { return }
-                    fa.seenRequestIDs.insert(rid)
+                    let h = fnv1a64(rid)                          // stored as a stable hash, not the string
+                    if fa.seenRequestIDs.contains(h) { return }
+                    fa.seenRequestIDs.insert(h)
                 }
                 guard let message = obj.dict("message"), let usage = message.dict("usage") else { return }
                 let model = message.str("model") ?? "unknown"

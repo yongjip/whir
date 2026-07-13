@@ -50,7 +50,7 @@ public struct FileAgg: Codable {
     /// cost itself is never stored here, only computed at read time — so a
     /// pricing change needs no rescan.
     public var tokensByProject: [String: [String: ModelTokens]]
-    public var seenRequestIDs: Set<String>      // Claude dedup
+    public var seenRequestIDs: Set<UInt64>      // Claude dedup (stable FNV-1a hashes, not strings)
     public var lastModel: String?               // Codex: carry turn_context model across a resume
     public var lastTokenFP: String?             // Codex: drop consecutive duplicate token_count snapshots
 
