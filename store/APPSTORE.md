@@ -69,6 +69,14 @@ sandboxed).
 
 ## What's New — paste into ASC for each update
 
+**v0.2.2 (build 7):**
+> - Much lighter on your Mac: a price-table update no longer rescans your
+>   logs, the idle 5-minute refresh now does no work when nothing changed,
+>   and log scanning is roughly 8x faster overall (SIMD line scanning +
+>   files scanned in parallel). The first launch after this update rebuilds
+>   the local cache once (~a few seconds).
+> - Smaller on-disk cache (request IDs stored as compact hashes).
+
 **v0.2.1 (build 6):**
 > - Newly released OpenAI text models are now picked up automatically from the
 >   downloaded price table, with safer exact model matching.
