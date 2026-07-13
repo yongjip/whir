@@ -157,6 +157,29 @@ final class HistoryModel {
 
     func color(_ name: String) -> Color { colorMap[name] ?? .gray }
 
+    /// Write a full-fidelity CSV of the current granularity to ~/Downloads
+    /// (the only place the sandbox lets us write besides our own container —
+    /// see Whir.entitlements). Returns the file URL, nil on failure.
+    func exportCSV() -> URL? {
+        guard let snap = snapshot else { return nil }
+        let f = DateFormatter()
+        f.dateFormat = "yyyyMMdd-HHmmss"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        guard let dir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        else { return nil }
+        let url = dir.appendingPathComponent("whir-usage-\(granularity.rawValue)-\(f.string(from: Date())).csv")
+        do {
+            try snap.csv(granularity).write(to: url, atomically: true, encoding: .utf8)
+            return url
+        } catch { return nil }
+    }
+
+    /// Chart selection helper: map a bar's x label back to its bucket key
+    /// (labels are unique within the visible `recent` window).
+    func key(forLabel label: String) -> String? {
+        recent.first { $0.label == label }?.key
+    }
+
     /// Recent slice sized for readability per granularity.
     var recent: [GroupedPoint] {
         let cap: Int

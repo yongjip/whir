@@ -322,12 +322,12 @@ func buildSeries(_ aggs: [String: HourAgg], _ g: Granularity) -> [SeriesPoint] {
                                   claude: claude[$0] ?? 0, codex: codex[$0] ?? 0) }
 }
 
-// MARK: - grouped series (split each bucket by provider or by model)
+// MARK: - grouped series (split each bucket by provider, model, or project)
 
 public enum GroupBy: String, CaseIterable, Identifiable {
-    case provider, model
+    case provider, model, project
     public var id: String { rawValue }
-    public var title: String { self == .provider ? "Provider" : "Model" }
+    public var title: String { rawValue.capitalized }
 }
 
 public struct GroupSlice { public let name: String; public let cost: Double }
@@ -340,7 +340,8 @@ public struct GroupedPoint: Identifiable {
     public var total: Double { slices.reduce(0) { $0 + $1.cost } }
 }
 
-/// Cost per bucket, split into slices by provider or by model, sorted ascending by key.
+/// Cost per bucket, split into slices by provider, model, or project — sorted
+/// ascending by key. Projects merge across providers (same name = same slice).
 func buildGroupedSeries(_ aggs: [String: HourAgg], _ g: Granularity, _ by: GroupBy) -> [GroupedPoint] {
     var byBucket: [String: [String: Double]] = [:]   // bucketKey -> group -> cost
     var labels: [String: String] = [:]
@@ -349,11 +350,22 @@ func buildGroupedSeries(_ aggs: [String: HourAgg], _ g: Granularity, _ by: Group
         for (hourKey, bd) in agg.buckets {
             let (k, l) = rollupKey(hourKey, g, &weekMemo)
             labels[k] = l
-            for (model, t) in bd.models {
-                let c = cost(provider: agg.provider, model: model, tokens: t).usd
-                if c == 0 { continue }
-                let group = (by == .provider) ? agg.provider.rawValue : model
-                byBucket[k, default: [:]][group, default: 0] += c
+            switch by {
+            case .provider, .model:
+                for (model, t) in bd.models {
+                    let c = cost(provider: agg.provider, model: model, tokens: t).usd
+                    if c == 0 { continue }
+                    let group = (by == .provider) ? agg.provider.rawValue : model
+                    byBucket[k, default: [:]][group, default: 0] += c
+                }
+            case .project:
+                for (proj, pa) in bd.projects {
+                    for (model, t) in pa.models {
+                        let c = cost(provider: agg.provider, model: model, tokens: t).usd
+                        if c == 0 { continue }
+                        byBucket[k, default: [:]][proj, default: 0] += c
+                    }
+                }
             }
         }
     }

@@ -1,8 +1,11 @@
 import SwiftUI
+import Charts
 import WhirCore
 
 struct HistoryView: View {
     @Bindable var model: HistoryModel
+    // List stays the default (restraint); the chart is an opt-in view style.
+    @AppStorage("history.chart") private var showChart = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -15,7 +18,7 @@ struct HistoryView: View {
             } else {
                 legendView
                 HStack(alignment: .top, spacing: 16) {
-                    spine.frame(width: 360)
+                    Group { if showChart { chart } else { spine } }.frame(width: 360)
                     detailPanel
                 }
             }
@@ -46,10 +49,61 @@ struct HistoryView: View {
             }.pickerStyle(.segmented).labelsHidden().frame(width: 210)
             Picker("", selection: Binding(get: { model.groupBy }, set: { model.setGroupBy($0) })) {
                 ForEach(GroupBy.allCases) { Text($0.title).tag($0) }
-            }.pickerStyle(.segmented).labelsHidden().frame(width: 140)
+            }.pickerStyle(.segmented).labelsHidden().frame(width: 200)
+            Picker("", selection: $showChart) {
+                Image(systemName: "list.bullet").tag(false)
+                Image(systemName: "chart.bar.fill").tag(true)
+            }.pickerStyle(.segmented).labelsHidden().frame(width: 70)
+                .help("List or chart")
             if model.building { ProgressView().controlSize(.small) }
+            Button {
+                if let url = model.exportCSV() {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                }
+            } label: { Image(systemName: "square.and.arrow.up") }
+                .buttonStyle(.borderless).help("Export CSV to Downloads")
             Button { model.refresh() } label: { Image(systemName: "arrow.clockwise") }
                 .buttonStyle(.borderless).help("Refresh")
+        }
+    }
+
+    // MARK: chart (stacked bars over time; click a bar to drill down)
+
+    /// Groups ordered by total cost desc — keeps chart colors identical to the
+    /// legend and the spine (model.color drives all three).
+    private var chartGroups: [String] {
+        var totals: [String: Double] = [:]
+        for p in model.recent { for s in p.slices { totals[s.name, default: 0] += s.cost } }
+        return totals.sorted { $0.value > $1.value }.map(\.key)
+    }
+
+    private var chart: some View {
+        let labels = model.recent.map(\.label)
+        let stride = max(1, labels.count / 6)
+        let ticks = Swift.stride(from: 0, to: labels.count, by: stride).map { labels[$0] }
+        return Chart {
+            ForEach(model.recent) { p in
+                ForEach(p.slices, id: \.name) { s in
+                    BarMark(x: .value("Period", p.label), y: .value("Cost", s.cost))
+                        .foregroundStyle(by: .value("Group", s.name))
+                }
+            }
+        }
+        .chartForegroundStyleScale(domain: chartGroups, range: chartGroups.map { model.color($0) })
+        .chartLegend(.hidden)   // the legend row above already covers it
+        .chartXAxis { AxisMarks(values: ticks) }
+        .chartOverlay { proxy in
+            GeometryReader { geo in
+                Rectangle().fill(.clear).contentShape(Rectangle())
+                    .onTapGesture { location in
+                        guard let plot = proxy.plotFrame else { return }
+                        let x = location.x - geo[plot].origin.x
+                        if let label: String = proxy.value(atX: x),
+                           let key = model.key(forLabel: label) {
+                            model.selectedKey = key
+                        }
+                    }
+            }
         }
     }
 

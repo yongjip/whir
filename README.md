@@ -6,7 +6,7 @@ Whir reads the local usage logs that Claude Code and Codex already write, and sh
 
 ## Features
 - **Menu bar** — today's estimated usage value at a glance; click for a Claude/Codex breakdown and last-30-day ROI.
-- **History** — usage by **hour / day / week / month**, split by **provider or model**, with a per-period **drilldown** (token table: input / cache / output / cost, by model and by project).
+- **History** — usage by **hour / day / week / month**, split by **provider, model, or project**, as a list or a **stacked bar chart**, with a per-period **drilldown** (token table: input / cache / output / cost, by model and by project) and one-click **CSV export** (also `whir --history --csv`).
 - **ROI** — enter your monthly subscription and see *"N× your $X/mo"* — value vs. what you actually pay.
 - **System monitor** — live **CPU / RAM / disk**, RunCat-style.
 - **Shortcuts / Spotlight** — an App Intent returns today's usage value for automations (reads the local cache; no folder access needed).

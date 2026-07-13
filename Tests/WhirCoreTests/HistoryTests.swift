@@ -123,6 +123,48 @@ final class HistoryTests: XCTestCase {
         XCTAssertEqual(d.projects.first?.project, "p")
     }
 
+    // Grouping by project merges the same project across providers and pulls
+    // token sums from ProjectAgg (per-model, so cost is exact per model).
+    func testGroupedSeriesByProject() {
+        var c = HourAgg(provider: .claude)
+        c.buckets["2026-06-15 09"] = bd(["claude-opus-4-8": tok(input: 1_000_000)],
+                                        ["backend": ["claude-opus-4-8": tok(input: 1_000_000)]])   // $5
+        var x = HourAgg(provider: .codex)
+        x.buckets["2026-06-15 14"] = bd(["gpt-5.5": tok(input: 1_000_000)],
+                                        ["backend": ["gpt-5.5": tok(input: 500_000)],              // $2.50
+                                         "frontend": ["gpt-5.5": tok(input: 500_000)]])            // $2.50
+
+        let byProject = buildGroupedSeries(["c": c, "x": x], .day, .project)
+        XCTAssertEqual(byProject.count, 1)
+        let slices = Dictionary(uniqueKeysWithValues: byProject[0].slices.map { ($0.name, $0.cost) })
+        XCTAssertEqual(slices["backend"] ?? 0, 7.5, accuracy: 1e-9, "same project merges across providers")
+        XCTAssertEqual(slices["frontend"] ?? 0, 2.5, accuracy: 1e-9)
+        XCTAssertEqual(byProject[0].slices.first?.name, "backend", "slices sorted by cost desc")
+    }
+
+    // CSV export: full fidelity rows, RFC-ish quoting, and the honesty rule —
+    // unpriced models get an EMPTY cost cell, never 0.00.
+    func testCSVExport() {
+        var c = HourAgg(provider: .claude)
+        var t = ModelTokens(); t.input = 1_000_000; t.output = 100_000; t.cacheRead = 2_000_000
+        c.buckets["2026-06-15 09"] = bd(["claude-opus-4-8": t],
+                                        ["my, \"odd\" proj": ["claude-opus-4-8": t]])
+        var x = HourAgg(provider: .codex)
+        var u = ModelTokens(); u.input = 500_000
+        x.buckets["2026-06-15 14"] = bd(["mystery-model": u], ["backend": ["mystery-model": u]])
+
+        let csv = HistorySnapshot(aggs: ["c": c, "x": x]).csv(.day)
+        let lines = csv.split(separator: "\n").map(String.init)
+        XCTAssertEqual(lines[0],
+            "period,provider,project,model,input,cached_input,cache_read,cache_write_5m,cache_write_1h,output,cost_usd")
+        XCTAssertEqual(lines.count, 3, "header + one row per (period,provider,project,model)")
+        // Claude row: quoted project, exact tokens, cost = 1M*$5 + 2M*$0.5 + 0.1M*$25 = $8.50
+        XCTAssertEqual(lines[1],
+            "2026-06-15,Claude Code,\"my, \"\"odd\"\" proj\",claude-opus-4-8,1000000,0,2000000,0,0,100000,8.5000")
+        // Unknown model: cost cell EMPTY (trailing comma), never 0.00
+        XCTAssertEqual(lines[2], "2026-06-15,Codex,backend,mystery-model,500000,0,0,0,0,0,")
+    }
+
     // The keyer memoizes per UTC minute; memoized answers must agree with full
     // formatter parsing, and garbage must still fall through to "unknown".
     func testHourKeyerMemoizationMatchesFormatter() {

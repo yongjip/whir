@@ -16,6 +16,7 @@ if args.contains("-h") || args.contains("--help") {
     print("""
     usage: whir [--month YYYY-MM | --all]
            whir --history [--by hour|day|week|month] [--last N]
+           whir --history --csv [--by ...]   # full per-project/model export to stdout
     Incremental cache: first run is a full scan, later runs read only new bytes.
     """)
     exit(0)
@@ -39,6 +40,12 @@ if args.contains("--history") {
     let last = flagValue("--last").flatMap { Int($0) }
     func money(_ v: Double) -> String { String(format: "$%8.2f", v) }
     let snapshot = await HistoryEngine().refresh()
+
+    // Full-fidelity export (period × provider × project × model) to stdout.
+    if args.contains("--csv") {
+        print(snapshot.csv(g), terminator: "")
+        exit(0)
+    }
 
     // Drilldown for one bucket: --detail <key>
     if let key = flagValue("--detail") {
