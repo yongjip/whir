@@ -91,7 +91,21 @@ struct HistoryView: View {
         }
         .chartForegroundStyleScale(domain: chartGroups, range: chartGroups.map { model.color($0) })
         .chartLegend(.hidden)   // the legend row above already covers it
-        .chartXAxis { AxisMarks(values: ticks) }
+        // fixedSize: category bands are only ~12pt wide, so default axis labels
+        // truncate to "…" — the tick set is already thinned, so full labels fit.
+        // Day/hour keys are long enough to collide even thinned; the suffix
+        // ("07-13", "09:00") is unambiguous on an axis.
+        .chartXAxis {
+            AxisMarks(values: ticks) { value in
+                AxisGridLine()
+                AxisValueLabel {
+                    if let s: String = value.as(String.self) {
+                        Text(model.granularity == .month || model.granularity == .week ? s : String(s.suffix(5)))
+                            .font(.system(size: 9)).fixedSize()
+                    }
+                }
+            }
+        }
         .chartOverlay { proxy in
             GeometryReader { geo in
                 Rectangle().fill(.clear).contentShape(Rectangle())

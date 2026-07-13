@@ -46,6 +46,13 @@ cert on the fly — no local Distribution identity needed.
 2. Paste the What's New block (below) + review notes; check screenshots.
 3. Submit for review.
 
+All of step 1–2 can also be scripted against the ASC REST API with the same
+`.p8` key (create the appStoreVersion, PATCH whatsNew, upload screenshots via
+reserve → chunk PUT → commit, attach the build) — done that way for 0.2.2.
+Review notes + contact and the export-compliance answer
+(`ITSAppUsesNonExemptEncryption = NO` → `usesNonExemptEncryption: false`)
+carry over from the previous version automatically.
+
 ## Metadata / ASO (bundle/brand = Whir; the exact name "Whir" was taken on the App Store, so the store listing name carries a descriptor — on-device name stays "Whir")
 - **Name** (≤30): `Whir: AI Usage & Cost`
 - **Subtitle** (≤30): `Token spend in your menu bar`
