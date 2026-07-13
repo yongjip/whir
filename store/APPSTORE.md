@@ -70,6 +70,12 @@ sandboxed).
 ## What's New — paste into ASC for each update
 
 **v0.2.2 (build 7):**
+> - History can now group usage by project (alongside provider and model) —
+>   see what each project actually costs.
+> - New chart view in History: an optional stacked bar chart; click a bar to
+>   drill into that period. The compact list stays the default.
+> - Export your usage as CSV (per period, provider, project, and model) to
+>   Downloads with one click.
 > - Much lighter on your Mac: a price-table update no longer rescans your
 >   logs, the idle 5-minute refresh now does no work when nothing changed,
 >   and log scanning is roughly 8x faster overall (SIMD line scanning +
