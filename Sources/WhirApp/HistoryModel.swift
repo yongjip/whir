@@ -59,6 +59,7 @@ final class HistoryModel {
         autoTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
+        autoTimer?.tolerance = 30   // let macOS coalesce the wakeup (battery)
     }
 
     deinit { autoTimer?.invalidate() }
@@ -72,10 +73,13 @@ final class HistoryModel {
     func refresh() {
         guard scanTask == nil else { refreshQueued = true; return }
         building = true
+        let prior = snapshot   // resume in-memory: the periodic refresh skips the cache decode
         scanTask = Task.detached(priority: .userInitiated) {
             let roots = FolderAccess.currentRoots()
             let (s, status) = await FolderAccess.withAccess { () async -> (HistorySnapshot, RootsStatus) in
-                (await HistoryEngine().refresh(claudeProjects: roots.claudeProjects, codexSessions: roots.codexSessions),
+                (await HistoryEngine().refresh(claudeProjects: roots.claudeProjects,
+                                               codexSessions: roots.codexSessions,
+                                               resumingFrom: prior),
                  rootsStatus(claudeProjects: roots.claudeProjects, codexSessions: roots.codexSessions))
             }
             await MainActor.run {

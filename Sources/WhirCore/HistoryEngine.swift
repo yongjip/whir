@@ -46,17 +46,24 @@ public struct HistoryEngine {
     }
 
     /// Incremental all-time scan (reads only new bytes), persists, returns the snapshot.
+    /// Pass the previous snapshot to resume from its in-memory aggregates — the
+    /// app's periodic refresh then skips the multi-MB cache decode; disk is only
+    /// read cold (launch, CLI). When nothing changed, the encode + write are
+    /// skipped too, so an idle refresh does no JSON work and no disk writes.
     @discardableResult
     public func refresh(claudeProjects: String = homePath(".claude/projects"),
-                        codexSessions: String? = nil) async -> HistorySnapshot {
-        var aggs = HistoryCache.load() ?? [:]
+                        codexSessions: String? = nil,
+                        resumingFrom prior: HistorySnapshot? = nil) async -> HistorySnapshot {
+        var aggs = prior?.aggs ?? HistoryCache.load() ?? [:]
         let keyer = HourKeyer()
-        await ClaudeHistory.update(&aggs, root: claudeProjects, keyer: keyer)
-        await CodexHistory.update(&aggs, root: codexSessions ?? codexRoot(), keyer: keyer)
-        HistoryCache.save(aggs)
-        // Hand the scan's transient allocation burst back to the OS immediately,
-        // rather than leaving it resident-but-reclaimable for macOS to notice later.
-        malloc_zone_pressure_relief(nil, 0)
+        let claudeChanged = await ClaudeHistory.update(&aggs, root: claudeProjects, keyer: keyer)
+        let codexChanged = await CodexHistory.update(&aggs, root: codexSessions ?? codexRoot(), keyer: keyer)
+        if claudeChanged || codexChanged {
+            HistoryCache.save(aggs)
+            // Hand the scan's transient allocation burst back to the OS immediately,
+            // rather than leaving it resident-but-reclaimable for macOS to notice later.
+            malloc_zone_pressure_relief(nil, 0)
+        }
         return HistorySnapshot(aggs: aggs)
     }
 }

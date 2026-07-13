@@ -194,6 +194,49 @@ final class CachingIncrementalTests: XCTestCase {
         XCTAssertEqual(sumFiles(inc).0, sumFiles(full).0, "incremental must equal a full scan")
     }
 
+    // The engines skip the cache encode + write when a rescan found nothing new
+    // (the idle 5-minute auto-refresh), so update() must report change honestly:
+    // true when bytes were consumed or files reset/pruned, false when untouched.
+    func testUnchangedRescanReportsNoChange() async {
+        let root = tmpDir(); defer { try? FileManager.default.removeItem(atPath: root) }
+        let dir = root + "/2026/06/15"; mkdir(dir)
+        let file = dir + "/rollout-2026-06-15-aaa.jsonl"
+        write(ctx("gpt-5.5") + tok("2026-06-15T00:00:02Z", 1000, 200, 50), to: file)
+
+        var aggs: [String: FileAgg] = [:]
+        let ad = CodexAdapter(root: root)
+        let first = await ad.update(&aggs, window: .all)
+        let second = await ad.update(&aggs, window: .all)
+        XCTAssertTrue(first, "first scan consumes bytes → changed")
+        XCTAssertFalse(second, "untouched corpus → no change (save skipped)")
+        append(tok("2026-06-15T00:00:03Z", 100, 0, 5), to: file)
+        let afterAppend = await ad.update(&aggs, window: .all)
+        XCTAssertTrue(afterAppend, "appended bytes → changed again")
+
+        // Same contract on the Claude totals path and both history paths.
+        let croot = tmpDir(); defer { try? FileManager.default.removeItem(atPath: croot) }
+        let proj = croot + "/proj"; mkdir(proj)
+        write(claude("2026-06-15T01:00:00Z", req: "r1", model: "claude-opus-4-8", input: 100, output: 50),
+              to: proj + "/a.jsonl")
+        var cggs: [String: FileAgg] = [:]
+        let cad = ClaudeAdapter(root: croot)
+        let claudeFirst = await cad.update(&cggs, window: .all)
+        let claudeSecond = await cad.update(&cggs, window: .all)
+        XCTAssertTrue(claudeFirst)
+        XCTAssertFalse(claudeSecond)
+
+        var chours: [String: HourAgg] = [:]
+        let ch1 = await ClaudeHistory.update(&chours, root: croot, keyer: HourKeyer())
+        let ch2 = await ClaudeHistory.update(&chours, root: croot, keyer: HourKeyer())
+        XCTAssertTrue(ch1)
+        XCTAssertFalse(ch2)
+        var xhours: [String: HourAgg] = [:]
+        let xh1 = await CodexHistory.update(&xhours, root: root, keyer: HourKeyer())
+        let xh2 = await CodexHistory.update(&xhours, root: root, keyer: HourKeyer())
+        XCTAssertTrue(xh1)
+        XCTAssertFalse(xh2)
+    }
+
     // A granted root that becomes unreadable (moved / access lost) must NOT wipe
     // the cached aggregates — that would force a multi-GB rescan on recovery.
     func testUnreadableRootPreservesCache() async {

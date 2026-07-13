@@ -65,10 +65,14 @@ struct HourAgg: Codable {
 }
 
 /// Parses an ISO-8601 UTC timestamp into a LOCAL "yyyy-MM-dd HH" bucket key.
+/// Formatter parsing costs ~µs per call and log timestamps repeat heavily, so
+/// results are memoized per UTC minute — minute (not hour) granularity so
+/// half-hour timezones (+05:30, +05:45) still bucket correctly.
 final class HourKeyer {
     private let isoFrac = ISO8601DateFormatter()
     private let iso = ISO8601DateFormatter()
     private let out = DateFormatter()
+    private var memo: [String: String] = [:]   // UTC "yyyy-MM-ddTHH:mm" -> local key
     init() {
         isoFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         iso.formatOptions = [.withInternetDateTime]
@@ -77,8 +81,16 @@ final class HourKeyer {
         out.timeZone = .current
     }
     func key(_ ts: String?) -> String {
-        guard let ts, let d = isoFrac.date(from: ts) ?? iso.date(from: ts) else { return "unknown" }
-        return out.string(from: d)
+        guard let ts else { return "unknown" }
+        let minute = ts.count >= 16 ? String(ts.prefix(16)) : ""
+        if !minute.isEmpty, let hit = memo[minute] { return hit }
+        guard let d = isoFrac.date(from: ts) ?? iso.date(from: ts) else { return "unknown" }
+        let k = out.string(from: d)
+        if !minute.isEmpty {
+            if memo.count >= 8192 { memo.removeAll(keepingCapacity: true) }   // bound the scan's footprint
+            memo[minute] = k
+        }
+        return k
     }
 }
 
@@ -100,10 +112,16 @@ private func add(_ agg: inout HourAgg, hour: String, model: String,
 // MARK: - all-time, hour-bucketed adapters (share the cursor/identity logic of the totals adapters)
 
 enum ClaudeHistory {
-    static func update(_ aggs: inout [String: HourAgg], root: String, keyer: HourKeyer) async {
-        guard let found = files(under: root, suffix: ".jsonl") else { return }   // unreadable → keep cache
+    /// Returns whether anything changed (files pruned/reset or bytes consumed) —
+    /// the engine skips the cache write when a rescan found nothing new.
+    @discardableResult
+    static func update(_ aggs: inout [String: HourAgg], root: String, keyer: HourKeyer) async -> Bool {
+        guard let found = files(under: root, suffix: ".jsonl") else { return false }   // unreadable → keep cache
         let present = Set(found)
-        for (path, a) in aggs where a.provider == .claude && !present.contains(path) { aggs[path] = nil }
+        var changed = false
+        for (path, a) in aggs where a.provider == .claude && !present.contains(path) {
+            aggs[path] = nil; changed = true
+        }
         var lineCount = 0
         for path in present {
             guard let id = fileIdentity(path) else { continue }
@@ -111,8 +129,9 @@ enum ClaudeHistory {
             let reset = fa == nil || fa!.provider != .claude
                 || fa!.inode != id.inode || id.size < fa!.offset
                 || (id.size == fa!.offset && fa!.mtime != id.mtime)
-            if reset { fa = HourAgg(provider: .claude); fa!.inode = id.inode }
+            if reset { fa = HourAgg(provider: .claude); fa!.inode = id.inode; changed = true }
             if !reset && id.size == fa!.offset { aggs[path] = fa; continue }
+            let startOffset = fa!.offset
             guard let reader = LineReader(path: path, startOffset: fa!.offset) else { aggs[path] = fa; continue }
             while let raw = reader.nextRaw() {
                 if !raw.terminated { continue }
@@ -132,14 +151,18 @@ enum ClaudeHistory {
                 lineCount += 1
                 if lineCount % ScanYield.every == 0 { await Task.yield() }
             }
+            if reader.safeOffset != startOffset { changed = true }
             fa!.offset = reader.safeOffset; fa!.mtime = id.mtime
             aggs[path] = fa
         }
+        return changed
     }
 }
 
 enum CodexHistory {
-    static func update(_ aggs: inout [String: HourAgg], root: String, keyer: HourKeyer) async {
+    /// Returns whether anything changed — see ClaudeHistory.update.
+    @discardableResult
+    static func update(_ aggs: inout [String: HourAgg], root: String, keyer: HourKeyer) async -> Bool {
         var roots = [root]
         let archived = (root as NSString).deletingLastPathComponent + "/archived_sessions"
         if FileManager.default.fileExists(atPath: archived) { roots.append(archived) }
@@ -149,8 +172,11 @@ enum CodexHistory {
             guard let found = files(under: r, suffix: ".jsonl") else { allReadable = false; continue }
             for p in found { present.insert(p) }
         }
+        var changed = false
         if allReadable {   // unreadable root → keep cache instead of wiping it
-            for (path, a) in aggs where a.provider == .codex && !present.contains(path) { aggs[path] = nil }
+            for (path, a) in aggs where a.provider == .codex && !present.contains(path) {
+                aggs[path] = nil; changed = true
+            }
         }
 
         var lineCount = 0
@@ -160,8 +186,9 @@ enum CodexHistory {
             let reset = fa == nil || fa!.provider != .codex
                 || fa!.inode != id.inode || id.size < fa!.offset
                 || (id.size == fa!.offset && fa!.mtime != id.mtime)
-            if reset { fa = HourAgg(provider: .codex); fa!.inode = id.inode }
+            if reset { fa = HourAgg(provider: .codex); fa!.inode = id.inode; changed = true }
             if !reset && id.size == fa!.offset { aggs[path] = fa; continue }
+            let startOffset = fa!.offset
             guard let reader = LineReader(path: path, startOffset: fa!.offset) else { aggs[path] = fa; continue }
             var curModel = fa!.lastModel
             var curProject = fa!.lastProject
@@ -200,10 +227,12 @@ enum CodexHistory {
             }
             // Caught mid-replay: re-read from 0 next time with a fresh skipper.
             if skipper?.stillSkipping == true { aggs[path] = nil; continue }
+            if reader.safeOffset != startOffset { changed = true }
             fa!.lastModel = curModel; fa!.lastProject = curProject; fa!.lastTokenFP = lastFP
             fa!.offset = reader.safeOffset; fa!.mtime = id.mtime
             aggs[path] = fa
         }
+        return changed
     }
 }
 

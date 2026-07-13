@@ -16,7 +16,10 @@ public struct CodexAdapter {
         }
     }
 
-    public func update(_ aggs: inout [String: FileAgg], window: Window) async {
+    /// Returns whether anything changed (files pruned/reset or bytes consumed) —
+    /// the engine skips the cache write when a rescan found nothing new.
+    @discardableResult
+    public func update(_ aggs: inout [String: FileAgg], window: Window) async -> Bool {
         var roots = [root]
         let archived = (root as NSString).deletingLastPathComponent + "/archived_sessions"
         if FileManager.default.fileExists(atPath: archived) { roots.append(archived) }
@@ -35,11 +38,12 @@ public struct CodexAdapter {
                 present.insert(path)
             }
         }
+        var changed = false
         // Only prune when every root was readable — a transient access failure
         // must not wipe cached aggregates and force a multi-GB rescan on recovery.
         if allReadable {
             for (path, fa) in aggs where fa.provider == .codex && !present.contains(path) {
-                aggs[path] = nil
+                aggs[path] = nil; changed = true
             }
         }
 
@@ -53,9 +57,11 @@ public struct CodexAdapter {
             if reset {
                 fa = FileAgg(provider: .codex)
                 fa!.inode = id.inode
+                changed = true
             }
             if !reset && id.size == fa!.offset { aggs[path] = fa; continue }
 
+            let startOffset = fa!.offset
             guard let reader = LineReader(path: path, startOffset: fa!.offset) else {
                 aggs[path] = fa; continue
             }
@@ -103,11 +109,13 @@ public struct CodexAdapter {
             // agg) so the next scan re-reads with a fresh skipper. Nothing new was
             // counted, so it costs nothing and avoids double-counting the rest.
             if skipper?.stillSkipping == true { aggs[path] = nil; continue }
+            if reader.safeOffset != startOffset { changed = true }
             fa!.lastModel = curModel
             fa!.lastTokenFP = lastFP
             fa!.offset = reader.safeOffset
             fa!.mtime = id.mtime
             aggs[path] = fa
         }
+        return changed
     }
 }

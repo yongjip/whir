@@ -27,6 +27,7 @@ final class PricingUpdater {
         timer = Timer.scheduledTimer(withTimeInterval: 24 * 3600, repeats: true) { _ in
             Task { @MainActor in PricingUpdater.shared.refreshNow() }
         }
+        timer?.tolerance = 3600   // "daily-ish" is fine; let macOS batch the wakeup
     }
 
     /// `force` (Settings opt-in) bypasses the once-a-day throttle for immediacy.

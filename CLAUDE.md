@@ -80,17 +80,21 @@ Everything is named `Whir*`: the `WhirCore` library, the `WhirApp` target, the
 - **Pricing is an estimate.** Costs are derived from stored token sums at read
   time under `Pricing.swift`, stamped with `Pricing.asOf`. Subscription quotas
   aren't token-denominated, so the headline is *usage value*, not a bill —
-  label it honestly. `costByProject`/`ProjectAgg` store cost at scan-time
-  pricing, so the caches invalidate on a `Pricing.asOf` change (intentional).
-  The active table is the compiled-in one unless a **newer** local
-  `pricing.json` override exists (fetched by the app from the repo root). That
-  repo-root file is auto-synced from LiteLLM's community price table by CI
-  (`scripts/sync_pricing.py` + `.github/workflows/sync-pricing.yml`) — edit the
-  script, not the JSON; a test enforces the file stays parseable and covers the
-  built-in model families. Engines capture `asOf` at scan start and stamp
-  caches with it, so a mid-scan price update can't persist mixed-price
-  aggregates. A model missing from the table is `priced == false` — render it
-  as "—", never as $0.00.
+  label it honestly. The caches store **raw tokens only**
+  (`tokensByProject`/`ProjectAgg.models` — never dollars), so a price-table
+  update re-prices instantly with **no rescan**; don't reintroduce cost fields
+  into cached types or key the caches on `Pricing.asOf`. The active table is
+  the compiled-in one unless a **newer** local `pricing.json` override exists
+  (fetched by the app from the repo root). That repo-root file is auto-synced
+  from LiteLLM's community price table by CI (`scripts/sync_pricing.py` +
+  `.github/workflows/sync-pricing.yml`) — edit the script, not the JSON; a test
+  enforces the file stays parseable and covers the built-in model families. A
+  model missing from the table is `priced == false` — render it as "—", never
+  as $0.00.
+- **Idle refresh must stay cheap.** The app rescans every 5 minutes; adapter
+  `update()` returns whether anything changed and the engines skip the cache
+  encode + write (and the in-app path skips the decode, via `resumingFrom:`)
+  when it didn't. Don't add per-refresh work that runs on the no-change path.
 - **Defensive JSON.** Logs vary by tool version; parse with the tolerant
   `obj.str/dict/int` helpers and skip records that don't match, never assume a
   shape.

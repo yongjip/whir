@@ -9,14 +9,18 @@ public struct ClaudeAdapter {
 
     /// Incrementally update `aggs` in place: reads only bytes appended since the
     /// last scan, resets a file's aggregate if its identity changed or it shrank.
-    public func update(_ aggs: inout [String: FileAgg], window: Window) async {
+    /// Returns whether anything changed (files pruned/reset or bytes consumed) —
+    /// the engine skips the cache write when a rescan found nothing new.
+    @discardableResult
+    public func update(_ aggs: inout [String: FileAgg], window: Window) async -> Bool {
         // Unreadable root (missing / access lost) → leave cached aggs untouched
         // rather than wiping them (which would force a full rescan on recovery).
-        guard let found = files(under: root, suffix: ".jsonl") else { return }
+        guard let found = files(under: root, suffix: ".jsonl") else { return false }
         let present = Set(found)
+        var changed = false
         // Drop Claude files that vanished.
         for (path, fa) in aggs where fa.provider == .claude && !present.contains(path) {
-            aggs[path] = nil
+            aggs[path] = nil; changed = true
         }
 
         var lineCount = 0
@@ -29,9 +33,11 @@ public struct ClaudeAdapter {
             if reset {
                 fa = FileAgg(provider: .claude)
                 fa!.inode = id.inode
+                changed = true
             }
             if !reset && id.size == fa!.offset { aggs[path] = fa; continue }   // unchanged → keep cached
 
+            let startOffset = fa!.offset
             guard let reader = LineReader(path: path, startOffset: fa!.offset) else {
                 aggs[path] = fa; continue
             }
@@ -62,9 +68,11 @@ public struct ClaudeAdapter {
                 lineCount += 1
                 if lineCount % ScanYield.every == 0 { await Task.yield() }
             }
+            if reader.safeOffset != startOffset { changed = true }
             fa!.offset = reader.safeOffset
             fa!.mtime = id.mtime
             aggs[path] = fa
         }
+        return changed
     }
 }

@@ -122,4 +122,20 @@ final class HistoryTests: XCTestCase {
         let d = buildDetail(aggs, buildSeries(aggs, .day)[0].key, .day)
         XCTAssertEqual(d.projects.first?.project, "p")
     }
+
+    // The keyer memoizes per UTC minute; memoized answers must agree with full
+    // formatter parsing, and garbage must still fall through to "unknown".
+    func testHourKeyerMemoizationMatchesFormatter() {
+        let memoized = HourKeyer()
+        let fresh1 = HourKeyer().key("2026-06-15T01:02:59Z")
+        let a = memoized.key("2026-06-15T01:02:03.000Z")   // fills the 01:02 memo entry
+        let b = memoized.key("2026-06-15T01:02:59Z")       // memo hit, different seconds
+        XCTAssertEqual(a, b)
+        XCTAssertEqual(b, fresh1, "memo hit must equal a from-scratch parse")
+        XCTAssertNotEqual(memoized.key("2026-06-15T01:02:03Z"),
+                          memoized.key("2026-06-15T02:02:03Z"))
+        XCTAssertEqual(memoized.key("garbage"), "unknown")
+        XCTAssertEqual(memoized.key("garbage-that-is-long-enough"), "unknown")
+        XCTAssertEqual(memoized.key(nil), "unknown")
+    }
 }
