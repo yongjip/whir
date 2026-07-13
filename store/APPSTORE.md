@@ -17,19 +17,34 @@ sandboxed).
   Verified: `xcodegen generate` + `xcodebuild build` (unsigned) succeed with the
   icon compiled in (`Assets.car`, `CFBundleIconName=AppIcon`).
 
-## You must do (needs your Apple account — I can't)
-1. **Enroll** in the Apple Developer Program ($99/yr) → note your **Team ID**.
-2. **Generate the Xcode project**:
-   ```sh
-   brew install xcodegen
-   xcodegen generate            # creates Whir.xcodeproj
-   open Whir.xcodeproj
-   ```
-   Set your Team under *Signing & Capabilities* (or put the Team ID in `project.yml`).
-3. **App Store Connect** → create a new macOS app record (bundle id
-   `com.whir.Whir`). Fill metadata (below).
-4. In Xcode: **Product → Archive → Distribute App → App Store Connect → Upload**.
-5. Submit for review with the review notes (below).
+## Build + upload (scripted — verified 2026-07-14 for 0.2.2 build 7)
+
+Bump `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in `project.yml` AND
+`Resources/Info.plist` (the direct-dist bundle), add a What's New block below,
+then:
+
+```sh
+xcodegen generate
+xcodebuild -project Whir.xcodeproj -scheme Whir -configuration Release archive \
+  -archivePath build/Whir.xcarchive -allowProvisioningUpdates
+xcodebuild -exportArchive -archivePath build/Whir.xcarchive \
+  -exportOptionsPlist store/exportOptions.plist \
+  -allowProvisioningUpdates \
+  -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_SL4QF3B7JC.p8 \
+  -authenticationKeyID SL4QF3B7JC \
+  -authenticationKeyIssuerID <ISSUER_ID>   # ASC → Users and Access → Integrations
+```
+
+The `.p8` API key is the secret and stays out of the repo; the issuer id is
+account-wide — look it up in ASC (or other projects' release docs). Cloud
+signing (`-allowProvisioningUpdates` + the key) mints the Apple Distribution
+cert on the fly — no local Distribution identity needed.
+
+## Then in App Store Connect (web, needs your account)
+1. My Apps → Whir → the version → pick the processed build (email arrives when
+   processing finishes, usually minutes).
+2. Paste the What's New block (below) + review notes; check screenshots.
+3. Submit for review.
 
 ## Metadata / ASO (bundle/brand = Whir; the exact name "Whir" was taken on the App Store, so the store listing name carries a descriptor — on-device name stays "Whir")
 - **Name** (≤30): `Whir: AI Usage & Cost`

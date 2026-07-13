@@ -6,3 +6,4 @@ DerivedData/
 .idea/
 
 dist/
+build/
