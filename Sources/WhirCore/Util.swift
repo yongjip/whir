@@ -152,6 +152,34 @@ extension Dictionary where Key == String, Value == Any {
 /// rare enough that yielding itself isn't overhead.
 enum ScanYield { static let every = 20_000 }
 
+/// Kill switch for concurrent file scanning (A/B measured 4.6x faster full
+/// scans at flat peak memory). If it ever misbehaves, turn it off without a
+/// rebuild: the app honors `defaults write com.whir.Whir scan.parallel -bool
+/// NO`; any process (CLI, tests) honors `WHIR_SERIAL_SCAN=1`. Width 1 runs the
+/// exact same code path strictly one file at a time.
+public enum ScanConfig {
+    public static var parallelScanning =
+        ProcessInfo.processInfo.environment["WHIR_SERIAL_SCAN"] == nil
+    static var width: Int {
+        parallelScanning ? max(2, ProcessInfo.processInfo.activeProcessorCount - 2) : 1
+    }
+}
+
+/// Bounded-concurrency map over independent per-file scan jobs. Results arrive
+/// in completion order — every caller merges by path key, so order is moot.
+func scanConcurrently<J: Sendable, R: Sendable>(
+    _ jobs: [J], _ work: @escaping @Sendable (J) async -> R) async -> [R] {
+    await withTaskGroup(of: R.self, returning: [R].self) { group in
+        var out: [R] = []
+        out.reserveCapacity(jobs.count)
+        var it = jobs.makeIterator()
+        func addNext() { if let j = it.next() { group.addTask { await work(j) } } }
+        for _ in 0..<ScanConfig.width { addNext() }
+        for await r in group { out.append(r); addNext() }
+        return out
+    }
+}
+
 // MARK: - filesystem
 
 /// Recursively walk a directory, yielding files whose name matches `suffix`.

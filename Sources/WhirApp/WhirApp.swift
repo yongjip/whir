@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import WhirCore
 
 // App entry point + scenes. Views/models live in their own files:
 // PopoverView, UsageModel, HistoryView, HistoryModel, SubscriptionSettings, Formatting.
@@ -8,6 +9,11 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory) // menu-bar agent, no Dock icon
+        // Kill switch: `defaults write com.whir.Whir scan.parallel -bool NO`
+        // falls back to the strictly sequential scanner, no rebuild needed.
+        if UserDefaults.standard.object(forKey: "scan.parallel") as? Bool == false {
+            ScanConfig.parallelScanning = false
+        }
         // Adopt a previously fetched price table BEFORE the first scan, then
         // keep it fresh (a daily fetch — the app's only network call).
         PricingUpdater.shared.start()

@@ -95,6 +95,13 @@ Everything is named `Whir*`: the `WhirCore` library, the `WhirApp` target, the
   `update()` returns whether anything changed and the engines skip the cache
   encode + write (and the in-app path skips the decode, via `resumingFrom:`)
   when it didn't. Don't add per-refresh work that runs on the no-change path.
+- **Parallel scan has a kill switch.** Files scan concurrently
+  (`scanConcurrently` at `ScanConfig.width`; A/B: 4.6× faster full scans, flat
+  peak RSS). If it ever misbehaves, no rebuild needed:
+  `defaults write com.whir.Whir scan.parallel -bool NO` (app) or
+  `WHIR_SERIAL_SCAN=1` (CLI/tests) runs the same code path at width 1.
+  `HourKeyer` is NOT thread-safe — each file-scan task creates its own; never
+  share one across tasks.
 - **Defensive JSON.** Logs vary by tool version; parse with the tolerant
   `obj.str/dict/int` helpers and skip records that don't match, never assume a
   shape.

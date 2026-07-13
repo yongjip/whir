@@ -55,9 +55,8 @@ public struct HistoryEngine {
                         codexSessions: String? = nil,
                         resumingFrom prior: HistorySnapshot? = nil) async -> HistorySnapshot {
         var aggs = prior?.aggs ?? HistoryCache.load() ?? [:]
-        let keyer = HourKeyer()
-        let claudeChanged = await ClaudeHistory.update(&aggs, root: claudeProjects, keyer: keyer)
-        let codexChanged = await CodexHistory.update(&aggs, root: codexSessions ?? codexRoot(), keyer: keyer)
+        let claudeChanged = await ClaudeHistory.update(&aggs, root: claudeProjects)
+        let codexChanged = await CodexHistory.update(&aggs, root: codexSessions ?? codexRoot())
         if claudeChanged || codexChanged {
             HistoryCache.save(aggs)
             // Hand the scan's transient allocation burst back to the OS immediately,

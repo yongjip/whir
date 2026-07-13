@@ -115,7 +115,7 @@ final class HistoryTests: XCTestCase {
             .write(toFile: file, atomically: true, encoding: .utf8)
 
         var aggs: [String: HourAgg] = [:]
-        await ClaudeHistory.update(&aggs, root: root, keyer: HourKeyer())
+        await ClaudeHistory.update(&aggs, root: root)
         XCTAssertEqual(buildSeries(aggs, .hour).count, 2)
         XCTAssertEqual(buildSeries(aggs, .day).count, 1)
         // and the day's drilldown attributes to the project "p"

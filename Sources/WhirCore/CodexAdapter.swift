@@ -16,8 +16,10 @@ public struct CodexAdapter {
         }
     }
 
-    /// Returns whether anything changed (files pruned/reset or bytes consumed) —
-    /// the engine skips the cache write when a rescan found nothing new.
+    /// Files needing a read are scanned concurrently (see ScanConfig for the
+    /// kill switch) — each file's aggregate is independent (the fork skipper
+    /// only READS other files), so results merge deterministically by path.
+    /// Returns whether anything changed (files pruned/reset or bytes consumed).
     @discardableResult
     public func update(_ aggs: inout [String: FileAgg], window: Window) async -> Bool {
         var roots = [root]
@@ -47,7 +49,8 @@ public struct CodexAdapter {
             }
         }
 
-        var lineCount = 0
+        // Classify sequentially (cheap stats); collect the files that need reads.
+        var jobs: [(path: String, fa: FileAgg, mtime: Double)] = []
         for path in present {
             guard let id = fileIdentity(path) else { continue }
             var fa = aggs[path]
@@ -60,62 +63,75 @@ public struct CodexAdapter {
                 changed = true
             }
             if !reset && id.size == fa!.offset { aggs[path] = fa; continue }
+            jobs.append((path, fa!, id.mtime))
+        }
 
-            let startOffset = fa!.offset
-            guard let reader = LineReader(path: path, startOffset: fa!.offset) else {
-                aggs[path] = fa; continue
-            }
-            var curModel = fa!.lastModel    // carry model across the resume boundary
-            // On a from-scratch read of a forked session, skip the replayed parent prefix.
-            var skipper = fa!.offset == 0 ? CodexPrefixSkipper(forkPath: path, roots: roots) : nil
-            var lastFP = fa!.lastTokenFP    // drop consecutive duplicate token_count snapshots
-            while let raw = reader.nextRaw() {
-                if !raw.terminated { continue }                      // mid-write tail: re-read when completed
-                let isCtx = raw.contains(LineNeedle.turnContext)
-                let isTok = raw.contains(LineNeedle.tokenCount)
-                if !isCtx && !isTok { continue }
-                // Drain the per-line JSONSerialization garbage each iteration — the
-                // periodic yield below drains the task's own pool, but this one
-                // keeps each line's garbage from surviving to the next yield point.
-                autoreleasepool {
-                    guard let obj = jsonObject(raw.string) else { return }
-
-                    if obj.str("type") == "turn_context" {
-                        if let m = obj.dict("payload")?.str("model") { curModel = m }
-                        return
-                    }
-                    guard let payload = obj.dict("payload"), payload.str("type") == "token_count",
-                          let last = payload.dict("info")?.dict("last_token_usage") else { return }
-
-                    let tup = [last.int("input_tokens"), last.int("cached_input_tokens"), last.int("output_tokens")]
-                    if skipper?.shouldSkip(tup) == true { return }   // inherited fork replay — counted in the parent
-
-                    let total = payload.dict("info")?.dict("total_token_usage")
-                    let fp = "\(obj.str("timestamp") ?? "")|\(tup[0])|\(tup[1])|\(tup[2])|\(total?.int("input_tokens") ?? -1)|\(total?.int("output_tokens") ?? -1)"
-                    if fp == lastFP { return }   // consecutive duplicate token_count snapshot (Codex re-emit)
-                    lastFP = fp
-
-                    let model = curModel ?? "unknown"
-                    if Pricing.excludedModels.contains(model) { return }
-
-                    var t = ModelTokens()
-                    t.input = tup[0]; t.cachedInput = tup[1]; t.output = tup[2]
-                    fa!.models[model] = (fa!.models[model] ?? ModelTokens()) + t
-                }
-                lineCount += 1
-                if lineCount % ScanYield.every == 0 { await Task.yield() }
-            }
-            // Caught the fork mid-replay: leave the cursor at 0 (drop the partial
-            // agg) so the next scan re-reads with a fresh skipper. Nothing new was
-            // counted, so it costs nothing and avoids double-counting the rest.
-            if skipper?.stillSkipping == true { aggs[path] = nil; continue }
-            if reader.safeOffset != startOffset { changed = true }
-            fa!.lastModel = curModel
-            fa!.lastTokenFP = lastFP
-            fa!.offset = reader.safeOffset
-            fa!.mtime = id.mtime
-            aggs[path] = fa
+        let scanRoots = roots
+        let results = await scanConcurrently(jobs) { j in
+            await Self.scanFile(path: j.path, fa: j.fa, mtime: j.mtime, roots: scanRoots)
+        }
+        for (path, fa, fileChanged) in results {
+            aggs[path] = fa   // nil = caught mid-replay; re-read from 0 next scan
+            changed = changed || fileChanged
         }
         return changed
+    }
+
+    private static func scanFile(path: String, fa faIn: FileAgg, mtime: Double,
+                                 roots: [String]) async -> (String, FileAgg?, Bool) {
+        var fa = faIn
+        let startOffset = fa.offset
+        guard let reader = LineReader(path: path, startOffset: fa.offset) else { return (path, fa, false) }
+        var curModel = fa.lastModel    // carry model across the resume boundary
+        // On a from-scratch read of a forked session, skip the replayed parent prefix.
+        var skipper = fa.offset == 0 ? CodexPrefixSkipper(forkPath: path, roots: roots) : nil
+        var lastFP = fa.lastTokenFP    // drop consecutive duplicate token_count snapshots
+        var lineCount = 0
+        while let raw = reader.nextRaw() {
+            if !raw.terminated { continue }                      // mid-write tail: re-read when completed
+            let isCtx = raw.contains(LineNeedle.turnContext)
+            let isTok = raw.contains(LineNeedle.tokenCount)
+            if !isCtx && !isTok { continue }
+            // Drain the per-line JSONSerialization garbage each iteration — the
+            // periodic yield below drains the task's own pool, but this one
+            // keeps each line's garbage from surviving to the next yield point.
+            autoreleasepool {
+                guard let obj = jsonObject(raw.string) else { return }
+
+                if obj.str("type") == "turn_context" {
+                    if let m = obj.dict("payload")?.str("model") { curModel = m }
+                    return
+                }
+                guard let payload = obj.dict("payload"), payload.str("type") == "token_count",
+                      let last = payload.dict("info")?.dict("last_token_usage") else { return }
+
+                let tup = [last.int("input_tokens"), last.int("cached_input_tokens"), last.int("output_tokens")]
+                if skipper?.shouldSkip(tup) == true { return }   // inherited fork replay — counted in the parent
+
+                let total = payload.dict("info")?.dict("total_token_usage")
+                let fp = "\(obj.str("timestamp") ?? "")|\(tup[0])|\(tup[1])|\(tup[2])|\(total?.int("input_tokens") ?? -1)|\(total?.int("output_tokens") ?? -1)"
+                if fp == lastFP { return }   // consecutive duplicate token_count snapshot (Codex re-emit)
+                lastFP = fp
+
+                let model = curModel ?? "unknown"
+                if Pricing.excludedModels.contains(model) { return }
+
+                var t = ModelTokens()
+                t.input = tup[0]; t.cachedInput = tup[1]; t.output = tup[2]
+                fa.models[model] = (fa.models[model] ?? ModelTokens()) + t
+            }
+            lineCount += 1
+            if lineCount % ScanYield.every == 0 { await Task.yield() }
+        }
+        // Caught the fork mid-replay: leave the cursor at 0 (drop the partial
+        // agg) so the next scan re-reads with a fresh skipper. Nothing new was
+        // counted, so it costs nothing and avoids double-counting the rest.
+        if skipper?.stillSkipping == true { return (path, nil, false) }
+        let fileChanged = reader.safeOffset != startOffset
+        fa.lastModel = curModel
+        fa.lastTokenFP = lastFP
+        fa.offset = reader.safeOffset
+        fa.mtime = mtime
+        return (path, fa, fileChanged)
     }
 }

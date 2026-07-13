@@ -9,8 +9,11 @@ public struct ClaudeAdapter {
 
     /// Incrementally update `aggs` in place: reads only bytes appended since the
     /// last scan, resets a file's aggregate if its identity changed or it shrank.
-    /// Returns whether anything changed (files pruned/reset or bytes consumed) —
-    /// the engine skips the cache write when a rescan found nothing new.
+    /// Files needing a read are scanned concurrently (see ScanConfig for the
+    /// kill switch) — each file's aggregate is independent, so results merge
+    /// deterministically by path. Returns whether anything changed (files
+    /// pruned/reset or bytes consumed) — the engine skips the cache write when
+    /// a rescan found nothing new.
     @discardableResult
     public func update(_ aggs: inout [String: FileAgg], window: Window) async -> Bool {
         // Unreadable root (missing / access lost) → leave cached aggs untouched
@@ -23,7 +26,8 @@ public struct ClaudeAdapter {
             aggs[path] = nil; changed = true
         }
 
-        var lineCount = 0
+        // Classify sequentially (cheap stats); collect the files that need reads.
+        var jobs: [(path: String, fa: FileAgg, mtime: Double)] = []
         for path in present {
             guard let id = fileIdentity(path) else { continue }
             var fa = aggs[path]
@@ -36,43 +40,56 @@ public struct ClaudeAdapter {
                 changed = true
             }
             if !reset && id.size == fa!.offset { aggs[path] = fa; continue }   // unchanged → keep cached
+            jobs.append((path, fa!, id.mtime))
+        }
 
-            let startOffset = fa!.offset
-            guard let reader = LineReader(path: path, startOffset: fa!.offset) else {
-                aggs[path] = fa; continue
-            }
-            while let raw = reader.nextRaw() {
-                if !raw.terminated { continue }                      // mid-write tail: re-read when completed
-                if !raw.contains(LineNeedle.assistant) { continue }
-                // Drain per-line JSON garbage (assistant lines are large).
-                autoreleasepool {
-                    guard let obj = jsonObject(raw.string), obj.str("type") == "assistant" else { return }
-                    if case .month(let m) = window,
-                       !(obj.str("timestamp")?.hasPrefix(m) ?? false) { return }
-
-                    if let rid = obj.str("requestId") {
-                        if fa!.seenRequestIDs.contains(rid) { return }   // dedup retried requests
-                        fa!.seenRequestIDs.insert(rid)
-                    }
-                    guard let message = obj.dict("message"), let usage = message.dict("usage") else { return }
-                    let model = message.str("model") ?? "unknown"
-                    if Pricing.excludedModels.contains(model) { return }
-
-                    let t = claudeTokens(usage)
-                    fa!.models[model] = (fa!.models[model] ?? ModelTokens()) + t
-                    let proj = (obj.str("cwd").map { ($0 as NSString).lastPathComponent }) ?? "?"
-                    var byModel = fa!.tokensByProject[proj] ?? [:]
-                    byModel[model] = (byModel[model] ?? ModelTokens()) + t
-                    fa!.tokensByProject[proj] = byModel
-                }
-                lineCount += 1
-                if lineCount % ScanYield.every == 0 { await Task.yield() }
-            }
-            if reader.safeOffset != startOffset { changed = true }
-            fa!.offset = reader.safeOffset
-            fa!.mtime = id.mtime
+        let win = window
+        let results = await scanConcurrently(jobs) { j in
+            await Self.scanFile(path: j.path, fa: j.fa, mtime: j.mtime, window: win)
+        }
+        for (path, fa, fileChanged) in results {
             aggs[path] = fa
+            changed = changed || fileChanged
         }
         return changed
+    }
+
+    private static func scanFile(path: String, fa faIn: FileAgg, mtime: Double,
+                                 window: Window) async -> (String, FileAgg, Bool) {
+        var fa = faIn
+        let startOffset = fa.offset
+        guard let reader = LineReader(path: path, startOffset: fa.offset) else { return (path, fa, false) }
+        var lineCount = 0
+        while let raw = reader.nextRaw() {
+            if !raw.terminated { continue }                      // mid-write tail: re-read when completed
+            if !raw.contains(LineNeedle.assistant) { continue }
+            // Drain per-line JSON garbage (assistant lines are large).
+            autoreleasepool {
+                guard let obj = jsonObject(raw.string), obj.str("type") == "assistant" else { return }
+                if case .month(let m) = window,
+                   !(obj.str("timestamp")?.hasPrefix(m) ?? false) { return }
+
+                if let rid = obj.str("requestId") {
+                    if fa.seenRequestIDs.contains(rid) { return }   // dedup retried requests
+                    fa.seenRequestIDs.insert(rid)
+                }
+                guard let message = obj.dict("message"), let usage = message.dict("usage") else { return }
+                let model = message.str("model") ?? "unknown"
+                if Pricing.excludedModels.contains(model) { return }
+
+                let t = claudeTokens(usage)
+                fa.models[model] = (fa.models[model] ?? ModelTokens()) + t
+                let proj = (obj.str("cwd").map { ($0 as NSString).lastPathComponent }) ?? "?"
+                var byModel = fa.tokensByProject[proj] ?? [:]
+                byModel[model] = (byModel[model] ?? ModelTokens()) + t
+                fa.tokensByProject[proj] = byModel
+            }
+            lineCount += 1
+            if lineCount % ScanYield.every == 0 { await Task.yield() }
+        }
+        let fileChanged = reader.safeOffset != startOffset
+        fa.offset = reader.safeOffset
+        fa.mtime = mtime
+        return (path, fa, fileChanged)
     }
 }

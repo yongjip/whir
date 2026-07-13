@@ -120,12 +120,12 @@ final class CachingIncrementalTests: XCTestCase {
         write(claude("2026-06-15T01:00:00Z", req: "r1", model: "claude-opus-4-8", input: 100, output: 50), to: file)
 
         var inc: [String: HourAgg] = [:]
-        await ClaudeHistory.update(&inc, root: root, keyer: HourKeyer())
+        await ClaudeHistory.update(&inc, root: root)
         append(claude("2026-06-15T02:00:00Z", req: "r2", model: "claude-opus-4-8", input: 200, output: 60), to: file)
-        await ClaudeHistory.update(&inc, root: root, keyer: HourKeyer())
+        await ClaudeHistory.update(&inc, root: root)
 
         var full: [String: HourAgg] = [:]
-        await ClaudeHistory.update(&full, root: root, keyer: HourKeyer())
+        await ClaudeHistory.update(&full, root: root)
 
         XCTAssertEqual(sumHours(inc).0, 300, "claude history incremental input")
         XCTAssertEqual(sumHours(inc).2, 110)
@@ -140,12 +140,12 @@ final class CachingIncrementalTests: XCTestCase {
         write(ctx("gpt-5.5") + tok("2026-06-15T01:00:02Z", 1000, 200, 50), to: file)
 
         var inc: [String: HourAgg] = [:]
-        await CodexHistory.update(&inc, root: root, keyer: HourKeyer())
+        await CodexHistory.update(&inc, root: root)
         append(tok("2026-06-15T02:00:03Z", 2000, 500, 80), to: file)   // no new turn_context
-        await CodexHistory.update(&inc, root: root, keyer: HourKeyer())
+        await CodexHistory.update(&inc, root: root)
 
         var full: [String: HourAgg] = [:]
-        await CodexHistory.update(&full, root: root, keyer: HourKeyer())
+        await CodexHistory.update(&full, root: root)
 
         XCTAssertEqual(sumHours(inc).0, 3000, "codex history incremental input (model must carry across resume)")
         XCTAssertEqual(sumHours(inc).0, sumHours(full).0, "codex history incremental must equal full")
@@ -194,6 +194,32 @@ final class CachingIncrementalTests: XCTestCase {
         XCTAssertEqual(sumFiles(inc).0, sumFiles(full).0, "incremental must equal a full scan")
     }
 
+    // The parallel-scan kill switch (ScanConfig.parallelScanning = false, wired
+    // to `defaults write com.whir.Whir scan.parallel -bool NO` and
+    // WHIR_SERIAL_SCAN=1) must produce identical results through the same code
+    // path — width 1 IS the sequential scanner.
+    func testSerialKillSwitchMatchesParallel() async {
+        let root = tmpDir(); defer { try? FileManager.default.removeItem(atPath: root) }
+        for d in 0..<4 {
+            let dir = root + "/2026/06/1\(d)"; mkdir(dir)
+            write(ctx("gpt-5.5") + tok("2026-06-1\(d)T00:00:02Z", 100 * (d + 1), 10, 5),
+                  to: dir + "/rollout-2026-06-1\(d)-f\(d).jsonl")
+        }
+        var parallel: [String: FileAgg] = [:]
+        await CodexAdapter(root: root).update(&parallel, window: .all)
+
+        ScanConfig.parallelScanning = false
+        defer { ScanConfig.parallelScanning = true }
+        var serial: [String: FileAgg] = [:]
+        await CodexAdapter(root: root).update(&serial, window: .all)
+
+        XCTAssertEqual(sumFiles(parallel).0, 1000)
+        XCTAssertEqual(sumFiles(serial).0, sumFiles(parallel).0)
+        XCTAssertEqual(sumFiles(serial).1, sumFiles(parallel).1)
+        XCTAssertEqual(sumFiles(serial).2, sumFiles(parallel).2)
+        XCTAssertEqual(serial.count, parallel.count)
+    }
+
     // The engines skip the cache encode + write when a rescan found nothing new
     // (the idle 5-minute auto-refresh), so update() must report change honestly:
     // true when bytes were consumed or files reset/pruned, false when untouched.
@@ -226,13 +252,13 @@ final class CachingIncrementalTests: XCTestCase {
         XCTAssertFalse(claudeSecond)
 
         var chours: [String: HourAgg] = [:]
-        let ch1 = await ClaudeHistory.update(&chours, root: croot, keyer: HourKeyer())
-        let ch2 = await ClaudeHistory.update(&chours, root: croot, keyer: HourKeyer())
+        let ch1 = await ClaudeHistory.update(&chours, root: croot)
+        let ch2 = await ClaudeHistory.update(&chours, root: croot)
         XCTAssertTrue(ch1)
         XCTAssertFalse(ch2)
         var xhours: [String: HourAgg] = [:]
-        let xh1 = await CodexHistory.update(&xhours, root: root, keyer: HourKeyer())
-        let xh2 = await CodexHistory.update(&xhours, root: root, keyer: HourKeyer())
+        let xh1 = await CodexHistory.update(&xhours, root: root)
+        let xh2 = await CodexHistory.update(&xhours, root: root)
         XCTAssertTrue(xh1)
         XCTAssertFalse(xh2)
     }

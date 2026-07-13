@@ -68,6 +68,8 @@ struct HourAgg: Codable {
 /// Formatter parsing costs ~µs per call and log timestamps repeat heavily, so
 /// results are memoized per UTC minute — minute (not hour) granularity so
 /// half-hour timezones (+05:30, +05:45) still bucket correctly.
+/// NOT thread-safe (mutable memo): each concurrent file-scan task creates its
+/// own instance — never share one across tasks.
 final class HourKeyer {
     private let isoFrac = ISO8601DateFormatter()
     private let iso = ISO8601DateFormatter()
@@ -114,15 +116,16 @@ private func add(_ agg: inout HourAgg, hour: String, model: String,
 enum ClaudeHistory {
     /// Returns whether anything changed (files pruned/reset or bytes consumed) —
     /// the engine skips the cache write when a rescan found nothing new.
+    /// Files needing a read are scanned concurrently (ScanConfig kill switch).
     @discardableResult
-    static func update(_ aggs: inout [String: HourAgg], root: String, keyer: HourKeyer) async -> Bool {
+    static func update(_ aggs: inout [String: HourAgg], root: String) async -> Bool {
         guard let found = files(under: root, suffix: ".jsonl") else { return false }   // unreadable → keep cache
         let present = Set(found)
         var changed = false
         for (path, a) in aggs where a.provider == .claude && !present.contains(path) {
             aggs[path] = nil; changed = true
         }
-        var lineCount = 0
+        var jobs: [(path: String, fa: HourAgg, mtime: Double)] = []
         for path in present {
             guard let id = fileIdentity(path) else { continue }
             var fa = aggs[path]
@@ -131,38 +134,54 @@ enum ClaudeHistory {
                 || (id.size == fa!.offset && fa!.mtime != id.mtime)
             if reset { fa = HourAgg(provider: .claude); fa!.inode = id.inode; changed = true }
             if !reset && id.size == fa!.offset { aggs[path] = fa; continue }
-            let startOffset = fa!.offset
-            guard let reader = LineReader(path: path, startOffset: fa!.offset) else { aggs[path] = fa; continue }
-            while let raw = reader.nextRaw() {
-                if !raw.terminated { continue }
-                if !raw.contains(LineNeedle.assistant) { continue }
-                autoreleasepool {
-                    guard let obj = jsonObject(raw.string), obj.str("type") == "assistant" else { return }
-                    if let rid = obj.str("requestId") {
-                        if fa!.seenRequestIDs.contains(rid) { return }
-                        fa!.seenRequestIDs.insert(rid)
-                    }
-                    guard let message = obj.dict("message"), let usage = message.dict("usage") else { return }
-                    let model = message.str("model") ?? "unknown"
-                    if Pricing.excludedModels.contains(model) { return }
-                    add(&fa!, hour: keyer.key(obj.str("timestamp")), model: model,
-                        project: projectName(obj.str("cwd")), tokens: claudeTokens(usage))
-                }
-                lineCount += 1
-                if lineCount % ScanYield.every == 0 { await Task.yield() }
-            }
-            if reader.safeOffset != startOffset { changed = true }
-            fa!.offset = reader.safeOffset; fa!.mtime = id.mtime
+            jobs.append((path, fa!, id.mtime))
+        }
+        let results = await scanConcurrently(jobs) { j in
+            await scanFile(path: j.path, fa: j.fa, mtime: j.mtime)
+        }
+        for (path, fa, fileChanged) in results {
             aggs[path] = fa
+            changed = changed || fileChanged
         }
         return changed
+    }
+
+    private static func scanFile(path: String, fa faIn: HourAgg,
+                                 mtime: Double) async -> (String, HourAgg, Bool) {
+        var fa = faIn
+        let startOffset = fa.offset
+        guard let reader = LineReader(path: path, startOffset: fa.offset) else { return (path, fa, false) }
+        let keyer = HourKeyer()   // per task — HourKeyer is not thread-safe
+        var lineCount = 0
+        while let raw = reader.nextRaw() {
+            if !raw.terminated { continue }
+            if !raw.contains(LineNeedle.assistant) { continue }
+            autoreleasepool {
+                guard let obj = jsonObject(raw.string), obj.str("type") == "assistant" else { return }
+                if let rid = obj.str("requestId") {
+                    if fa.seenRequestIDs.contains(rid) { return }
+                    fa.seenRequestIDs.insert(rid)
+                }
+                guard let message = obj.dict("message"), let usage = message.dict("usage") else { return }
+                let model = message.str("model") ?? "unknown"
+                if Pricing.excludedModels.contains(model) { return }
+                add(&fa, hour: keyer.key(obj.str("timestamp")), model: model,
+                    project: projectName(obj.str("cwd")), tokens: claudeTokens(usage))
+            }
+            lineCount += 1
+            if lineCount % ScanYield.every == 0 { await Task.yield() }
+        }
+        let fileChanged = reader.safeOffset != startOffset
+        fa.offset = reader.safeOffset; fa.mtime = mtime
+        return (path, fa, fileChanged)
     }
 }
 
 enum CodexHistory {
     /// Returns whether anything changed — see ClaudeHistory.update.
+    /// Files needing a read are scanned concurrently (ScanConfig kill switch).
     @discardableResult
-    static func update(_ aggs: inout [String: HourAgg], root: String, keyer: HourKeyer) async -> Bool {
+    static func update(_ aggs: inout [String: HourAgg], root: String) async -> Bool {
         var roots = [root]
         let archived = (root as NSString).deletingLastPathComponent + "/archived_sessions"
         if FileManager.default.fileExists(atPath: archived) { roots.append(archived) }
@@ -179,7 +198,7 @@ enum CodexHistory {
             }
         }
 
-        var lineCount = 0
+        var jobs: [(path: String, fa: HourAgg, mtime: Double)] = []
         for path in present {
             guard let id = fileIdentity(path) else { continue }
             var fa = aggs[path]
@@ -188,51 +207,67 @@ enum CodexHistory {
                 || (id.size == fa!.offset && fa!.mtime != id.mtime)
             if reset { fa = HourAgg(provider: .codex); fa!.inode = id.inode; changed = true }
             if !reset && id.size == fa!.offset { aggs[path] = fa; continue }
-            let startOffset = fa!.offset
-            guard let reader = LineReader(path: path, startOffset: fa!.offset) else { aggs[path] = fa; continue }
-            var curModel = fa!.lastModel
-            var curProject = fa!.lastProject
-            var skipper = fa!.offset == 0 ? CodexPrefixSkipper(forkPath: path, roots: roots) : nil
-            var lastFP = fa!.lastTokenFP
-            while let raw = reader.nextRaw() {
-                if !raw.terminated { continue }
-                let isCtx = raw.contains(LineNeedle.turnContext)
-                let isTok = raw.contains(LineNeedle.tokenCount)
-                if !isCtx && !isTok { continue }
-                autoreleasepool {
-                    guard let obj = jsonObject(raw.string) else { return }
-                    if obj.str("type") == "turn_context" {
-                        let p = obj.dict("payload")
-                        if let m = p?.str("model") { curModel = m }
-                        if let c = p?.str("cwd") { curProject = projectName(c) }
-                        return
-                    }
-                    guard let payload = obj.dict("payload"), payload.str("type") == "token_count",
-                          let last = payload.dict("info")?.dict("last_token_usage") else { return }
-                    let tup = [last.int("input_tokens"), last.int("cached_input_tokens"), last.int("output_tokens")]
-                    if skipper?.shouldSkip(tup) == true { return }   // inherited fork replay — counted in the parent
-                    let total = payload.dict("info")?.dict("total_token_usage")
-                    let fp = "\(obj.str("timestamp") ?? "")|\(tup[0])|\(tup[1])|\(tup[2])|\(total?.int("input_tokens") ?? -1)|\(total?.int("output_tokens") ?? -1)"
-                    if fp == lastFP { return }   // consecutive duplicate token_count snapshot
-                    lastFP = fp
-                    let model = curModel ?? "unknown"
-                    if Pricing.excludedModels.contains(model) { return }
-                    var t = ModelTokens()
-                    t.input = tup[0]; t.cachedInput = tup[1]; t.output = tup[2]
-                    add(&fa!, hour: keyer.key(obj.str("timestamp")), model: model,
-                        project: curProject ?? "?", tokens: t)
-                }
-                lineCount += 1
-                if lineCount % ScanYield.every == 0 { await Task.yield() }
-            }
-            // Caught mid-replay: re-read from 0 next time with a fresh skipper.
-            if skipper?.stillSkipping == true { aggs[path] = nil; continue }
-            if reader.safeOffset != startOffset { changed = true }
-            fa!.lastModel = curModel; fa!.lastProject = curProject; fa!.lastTokenFP = lastFP
-            fa!.offset = reader.safeOffset; fa!.mtime = id.mtime
-            aggs[path] = fa
+            jobs.append((path, fa!, id.mtime))
+        }
+        let scanRoots = roots
+        let results = await scanConcurrently(jobs) { j in
+            await scanFile(path: j.path, fa: j.fa, mtime: j.mtime, roots: scanRoots)
+        }
+        for (path, fa, fileChanged) in results {
+            aggs[path] = fa   // nil = caught mid-replay; re-read from 0 next scan
+            changed = changed || fileChanged
         }
         return changed
+    }
+
+    private static func scanFile(path: String, fa faIn: HourAgg, mtime: Double,
+                                 roots: [String]) async -> (String, HourAgg?, Bool) {
+        var fa = faIn
+        let startOffset = fa.offset
+        guard let reader = LineReader(path: path, startOffset: fa.offset) else { return (path, fa, false) }
+        let keyer = HourKeyer()   // per task — HourKeyer is not thread-safe
+        var curModel = fa.lastModel
+        var curProject = fa.lastProject
+        var skipper = fa.offset == 0 ? CodexPrefixSkipper(forkPath: path, roots: roots) : nil
+        var lastFP = fa.lastTokenFP
+        var lineCount = 0
+        while let raw = reader.nextRaw() {
+            if !raw.terminated { continue }
+            let isCtx = raw.contains(LineNeedle.turnContext)
+            let isTok = raw.contains(LineNeedle.tokenCount)
+            if !isCtx && !isTok { continue }
+            autoreleasepool {
+                guard let obj = jsonObject(raw.string) else { return }
+                if obj.str("type") == "turn_context" {
+                    let p = obj.dict("payload")
+                    if let m = p?.str("model") { curModel = m }
+                    if let c = p?.str("cwd") { curProject = projectName(c) }
+                    return
+                }
+                guard let payload = obj.dict("payload"), payload.str("type") == "token_count",
+                      let last = payload.dict("info")?.dict("last_token_usage") else { return }
+                let tup = [last.int("input_tokens"), last.int("cached_input_tokens"), last.int("output_tokens")]
+                if skipper?.shouldSkip(tup) == true { return }   // inherited fork replay — counted in the parent
+                let total = payload.dict("info")?.dict("total_token_usage")
+                let fp = "\(obj.str("timestamp") ?? "")|\(tup[0])|\(tup[1])|\(tup[2])|\(total?.int("input_tokens") ?? -1)|\(total?.int("output_tokens") ?? -1)"
+                if fp == lastFP { return }   // consecutive duplicate token_count snapshot
+                lastFP = fp
+                let model = curModel ?? "unknown"
+                if Pricing.excludedModels.contains(model) { return }
+                var t = ModelTokens()
+                t.input = tup[0]; t.cachedInput = tup[1]; t.output = tup[2]
+                add(&fa, hour: keyer.key(obj.str("timestamp")), model: model,
+                    project: curProject ?? "?", tokens: t)
+            }
+            lineCount += 1
+            if lineCount % ScanYield.every == 0 { await Task.yield() }
+        }
+        // Caught mid-replay: re-read from 0 next time with a fresh skipper.
+        if skipper?.stillSkipping == true { return (path, nil, false) }
+        let fileChanged = reader.safeOffset != startOffset
+        fa.lastModel = curModel; fa.lastProject = curProject; fa.lastTokenFP = lastFP
+        fa.offset = reader.safeOffset; fa.mtime = mtime
+        return (path, fa, fileChanged)
     }
 }
 
