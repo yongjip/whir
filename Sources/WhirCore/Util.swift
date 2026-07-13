@@ -60,12 +60,13 @@ final class LineReader {
     }
 
     private func indexOfNewline() -> Int? {
-        var i = pos
-        while i < buffer.count {
-            if buffer[i] == newline { return i }
-            i += 1
+        // libc memchr is SIMD-vectorized — measurably faster across multi-GB
+        // scans than a scalar Swift loop with bounds checks.
+        buffer.withUnsafeBufferPointer { buf -> Int? in
+            guard pos < buf.count, let base = buf.baseAddress,
+                  let hit = memchr(base + pos, 0x0A, buf.count - pos) else { return nil }
+            return UnsafePointer(hit.assumingMemoryBound(to: UInt8.self)) - base
         }
-        return nil
     }
 }
 
@@ -85,21 +86,25 @@ struct RawLine {
 
 extension ArraySlice where Element == UInt8 {
     /// Raw byte substring search — no Unicode normalization, unlike String.contains.
+    /// memchr skips to each first-byte candidate with SIMD; memcmp verifies.
     func containsBytes(_ needle: [UInt8]) -> Bool {
         let n = needle.count
         guard n > 0, count >= n else { return false }
-        let first = needle[0]
-        let hi = endIndex - n
-        var i = startIndex
-        while i <= hi {
-            if self[i] == first {
-                var k = 1
-                while k < n && self[i &+ k] == needle[k] { k &+= 1 }
-                if k == n { return true }
+        return withUnsafeBufferPointer { hay -> Bool in
+            needle.withUnsafeBufferPointer { nee -> Bool in
+                guard let hayBase = hay.baseAddress, let neeBase = nee.baseAddress else { return false }
+                let first = Int32(neeBase.pointee)
+                let endOfStarts = hayBase + (hay.count - n + 1)   // last valid match start + 1
+                var search = hayBase
+                while search < endOfStarts,
+                      let hitRaw = memchr(search, first, endOfStarts - search) {
+                    let hit = UnsafePointer(hitRaw.assumingMemoryBound(to: UInt8.self))
+                    if memcmp(hit, neeBase, n) == 0 { return true }
+                    search = hit + 1
+                }
+                return false
             }
-            i &+= 1
         }
-        return false
     }
 }
 
