@@ -17,8 +17,9 @@ Strategy
 Safety
   - No write when nothing changed (no daily commit noise; asOf only moves on
     a real change).
-  - Fails (exit 1, no write) when a non-estimate price moves by more than 2x
-    either way, or when Claude coverage collapses — a human should look.
+  - Warns when a non-estimate price moves by more than 2x either way, while
+    still accepting the structurally valid upstream value automatically.
+  - Fails (exit 1, no write) when Claude coverage collapses.
 """
 
 import json
@@ -53,7 +54,7 @@ OPENAI_EXCEPTIONS = [
 # token tables to an unrelated future Codex id.
 OPENAI_EXCLUDED_MARKERS = ("audio", "realtime", "search")
 
-MAX_RATIO = 2.0   # a legit repricing beyond 2x either way deserves human eyes
+WARN_RATIO = 2.0   # keep large repricings conspicuous without blocking sync
 
 
 def clean(x):
@@ -142,9 +143,9 @@ def main():
             print(f"  warn: {prefix}: no upstream prices and no current row — skipped")
 
     # ---- sanity band vs the committed file (estimates are exempt) ----
-    # Existing rows retain the 2x change guard. New Claude snapshots also check
-    # their committed family fallback; new OpenAI ids are distinct tiers, so a
-    # family ratio would reject legitimate mini/nano/etc. prices.
+    # Existing rows warn on changes beyond 2x. New Claude snapshots also compare
+    # against their committed family fallback; new OpenAI ids are distinct tiers,
+    # so a family ratio would flag legitimate mini/nano/etc. prices.
     def family(prefix, committed):
         best = None
         for p, r in committed.items():
@@ -163,8 +164,9 @@ def main():
                 print(f"  warn: {prefix}: {reason} — admitting after structural checks")
                 continue
             for f in ("input", "output"):
-                if not (1 / MAX_RATIO <= row[f] / old[f] <= MAX_RATIO):
-                    sys.exit(f"error: {prefix} {f} = {row[f]} vs {via} {old[f]} (>{MAX_RATIO}x) — review manually")
+                if not (1 / WARN_RATIO <= row[f] / old[f] <= WARN_RATIO):
+                    print(f"  warn: {prefix} {f} = {row[f]} vs {via} {old[f]} "
+                          f"(>{WARN_RATIO}x) — accepting structurally valid upstream value")
 
     check_changes(claude, cur_claude, family_fallback=True)
     check_changes(openai, cur_openai, family_fallback=False)

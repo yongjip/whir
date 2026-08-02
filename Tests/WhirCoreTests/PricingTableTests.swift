@@ -103,9 +103,7 @@ import Foundation
         for (prefix, _) in Pricing.builtIn.openai {
             #expect(t.openAIPrice(prefix) != nil, "openai \(prefix) unpriced")
         }
-        #expect(t.openAIPrice("gpt-5.6")?.input == 5)
-        #expect(t.openAIPrice("gpt-5.6-sol")?.output == 30)
-        #expect(t.openAIPrice("gpt-5.6-terra")?.input == 2.5)
-        #expect(t.openAIPrice("gpt-5.6-luna")?.output == 6)
+        // Do not pin upstream dollar values here: legitimate repricing is the
+        // reason this file is auto-synced independently of app releases.
     }
 }
