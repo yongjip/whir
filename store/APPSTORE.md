@@ -57,7 +57,10 @@ cert on the fly — no local Distribution identity needed.
 1. My Apps → Whir → the version → pick the processed build (email arrives when
    processing finishes, usually minutes).
 2. Paste the What's New block (below) + review notes; check screenshots.
-3. Submit for review.
+3. Set **Automatically release this version after App Review approval**
+   (`releaseType = AFTER_APPROVAL`). Whir App Store versions always use this
+   setting; verify it on the version before submitting.
+4. Submit for review, then confirm the version still shows automatic release.
 
 All of step 1–2 can also be scripted against the ASC REST API with the same
 `.p8` key (create the appStoreVersion, PATCH whatsNew, upload screenshots via
@@ -72,8 +75,9 @@ carry over from the previous version automatically.
   Submission ID: `23718065-5657-4e38-8dea-95d9533d7b15` (submitted 13:30 KST).
 - The attached build is validated, and its included app icon visibly matches
   the seven-block W asset. The public version is still 0.2.2.
-- The release setting is **manual release after approval**. Do not upload build 9
-  again or publish the approved version without separate publication approval.
+- The release setting is **automatic release after approval**
+  (`releaseType = AFTER_APPROVAL`), verified on 2026-09-24. Do not upload build 9
+  again; Apple will publish this version after approval.
 - `swift build` and `swift test` passed for the 0.2.3 source; physical-device
   testing was unavailable. App Store Connect's What's New includes the icon
   update and the three pricing fixes below.
