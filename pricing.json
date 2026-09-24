@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "asOf": "2026-09-23",
+  "asOf": "2026-09-24",
   "comment": "Whir model price table ($/1M tokens); Claude family-prefix matched, OpenAI exact-id matched with dated-snapshot fallback; fetched daily by the app. Auto-synced from LiteLLM's model_prices_and_context_window.json by scripts/sync_pricing.py \u2014 edit that script, not this file. Claude cache multipliers are fixed in code: read 0.1x input, write-5m 1.25x, write-1h 2x.",
   "claude": [
     {
@@ -204,6 +204,13 @@
       "estimate": false
     },
     {
+      "prefix": "gpt-5-chat-latest",
+      "input": 1.25,
+      "cachedInput": 0.125,
+      "output": 10,
+      "estimate": false
+    },
+    {
       "prefix": "gpt-5-mini",
       "input": 0.25,
       "cachedInput": 0.025,
@@ -246,6 +253,13 @@
       "estimate": false
     },
     {
+      "prefix": "gpt-5.1-chat-latest",
+      "input": 1.25,
+      "cachedInput": 0.125,
+      "output": 10,
+      "estimate": false
+    },
+    {
       "prefix": "gpt-5.2",
       "input": 1.75,
       "cachedInput": 0.175,
@@ -254,6 +268,20 @@
     },
     {
       "prefix": "gpt-5.2-2025-12-11",
+      "input": 1.75,
+      "cachedInput": 0.175,
+      "output": 14,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.2-chat-latest",
+      "input": 1.75,
+      "cachedInput": 0.175,
+      "output": 14,
+      "estimate": false
+    },
+    {
+      "prefix": "gpt-5.3-chat-latest",
       "input": 1.75,
       "cachedInput": 0.175,
       "output": 14,
