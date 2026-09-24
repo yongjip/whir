@@ -26,7 +26,7 @@
 <div class="wrap">
   <a class="back" href="../">← Whir</a>
   <h1>Privacy Policy</h1>
-  <p class="upd">Last updated: 2026-07-02</p>
+  <p class="upd">Last updated: 2026-09-24</p>
 
   <p>Whir is a macOS menu-bar app that estimates the API-equivalent <strong>usage value</strong> of your local AI coding activity (Claude Code and Codex). It is designed to be private by construction.</p>
 
@@ -36,7 +36,7 @@
     <li><code>~/.claude/projects/**</code> (Claude Code)</li>
     <li><code>~/.codex/sessions/**</code> (Codex)</li>
   </ul>
-  <p>From those files it uses only <strong>token counts, model names, timestamps, and project folder names</strong> to compute cost estimates. It does <strong>not</strong> read your prompts, your code, tool output, conversation content, or any authentication tokens (it never reads <code>~/.codex/auth.json</code>).</p>
+  <p>Transcript lines may also contain prompts, generated code, and tool output. Whir parses matching JSON records in memory, but uses and caches only <strong>token counts, model names, timestamps, and project folder names</strong> to compute cost estimates. It does not display, store, or upload conversation content, and it never opens credential files such as <code>~/.codex/auth.json</code>.</p>
 
   <h2>What Whir does NOT do</h2>
   <ul>

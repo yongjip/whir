@@ -25,14 +25,17 @@ Whir doesn't compete on feature count or number of providers — the raw data is
 ## Non-goals
 
 - Competing on provider count.
-- Reading credentials, prompts, code, or transcripts — ever.
+- Reading credentials, or retaining, displaying, or transmitting prompts, code,
+  tool output, or transcripts. Matching JSONL records are parsed locally to
+  extract usage metadata.
 - A cloud account, sync, or server for the core.
 - Pretending estimates are bills. Usage value ≠ what you actually pay; label it honestly.
 
 ## How we'll know it's working
 
 - A heavy Claude/Codex user installs it and immediately sees a number that feels *right* and *surprising* (the ROI reveal).
-- The privacy claim is provable, not asserted — the app reads only metadata, and a skeptic can verify it.
+- The privacy claim is provable, not asserted — only metadata is cached or used
+  for estimates, and a skeptic can verify it.
 - It's the menu-bar item people keep, not the novelty they disable.
 
 ## Status

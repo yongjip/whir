@@ -18,8 +18,10 @@ These are the product. A change that breaks one is wrong, no matter how useful:
   because that fetch uses only Apple's TLS — exempt encryption.)
 - **No credentials, no keychain.** Never read the keychain, OAuth tokens, or
   `~/.codex/auth.json`. The trust story is "we structurally can't leak secrets."
-- **Read-only, metadata only.** Read token counts, model names, timestamps, and
-  project paths — never prompt text, generated code, or tool output.
+- **Read-only, metadata retention only.** Matching JSONL records may contain
+  prompts, generated code, and tool output, and are parsed transiently in
+  memory. Use and cache only token counts, model names, timestamps, and project
+  paths; never display, persist, or transmit conversation content.
 - **No third-party dependencies.** `Package.swift` has none. Keep it that way;
   reach for the standard library first.
 

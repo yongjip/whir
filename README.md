@@ -2,7 +2,7 @@
 
 **What your AI coding habit actually costs — one clean number in your Mac menu bar, computed entirely on your machine, without touching a single credential.**
 
-Whir reads the local usage logs that Claude Code and Codex already write, and shows the API-equivalent **usage value** of what you ran — live in the menu bar, with history and a system monitor. Local-first: it never reads your keychain, never sees prompts or code, and never uploads anything — its only network request is an optional once-a-day download of its own price table.
+Whir reads the local usage logs that Claude Code and Codex already write, and shows the API-equivalent **usage value** of what you ran — live in the menu bar, with history and a system monitor. Local-first: it never reads your keychain or credentials, and never uploads anything — its only network request is an optional once-a-day download of its own price table.
 
 ## Features
 - **Menu bar** — today's estimated usage value at a glance; click for a Claude/Codex breakdown and last-30-day ROI.
@@ -10,10 +10,10 @@ Whir reads the local usage logs that Claude Code and Codex already write, and sh
 - **ROI** — enter your monthly subscription and see *"N× your $X/mo"* — value vs. what you actually pay.
 - **System monitor** — live **CPU / RAM / disk**, RunCat-style.
 - **Shortcuts / Spotlight** — an App Intent returns today's usage value for automations (reads the local cache; no folder access needed).
-- **Private by design** — read-only on `~/.claude` & `~/.codex` metadata; no keychain, no prompt/code upload; the only network request is an optional daily price-table refresh (off-switchable in Settings).
+- **Private by design** — read-only local logs; only usage metadata is retained; no keychain or prompt/code upload. The only network request is an optional daily price-table refresh (off-switchable in Settings).
 
 ## Privacy
-Whir reads only token counts, model names, timestamps, and project paths. It never reads prompt text, generated code, tool output, auth tokens, or `~/.codex/auth.json`. Nothing is uploaded; there is no account and no server. (The direct build reads the folders directly; the Mac App Store build asks you to grant `~/.claude` / `~/.codex` once.)
+Local transcript lines can contain prompts, generated code, and tool output. Whir parses matching JSON records in memory, then uses and caches only token counts, model names, timestamps, and project paths. It does not display, store, or upload conversation content, and never opens the keychain or `~/.codex/auth.json`. There is no account or server. (The direct build reads the folders directly; the Mac App Store build asks you to grant `~/.claude` / `~/.codex` once.)
 
 ## Install
 - **Direct (recommended):** download the notarized DMG from Releases, or `brew install --cask yongjip/tap/whir`. See [`store/DIRECT.md`](store/DIRECT.md).

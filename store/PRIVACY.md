@@ -1,6 +1,6 @@
 # Whir — Privacy Policy
 
-_Last updated: 2026-07-02_
+_Last updated: 2026-09-24_
 
 Whir is a macOS menu-bar app that estimates the API-equivalent **usage value** of
 your local AI coding activity (Claude Code and Codex). It is designed to be
@@ -13,10 +13,11 @@ Whir reads only the local log files those tools already write on your Mac:
 - `~/.claude/projects/**` (Claude Code)
 - `~/.codex/sessions/**` (Codex)
 
-From those files it uses only **token counts, model names, timestamps, and
-project folder names** to compute cost estimates. It does **not** read your
-prompts, your code, tool output, conversation content, or any authentication
-tokens (e.g. it never reads `~/.codex/auth.json`).
+Transcript lines may also contain prompts, generated code, and tool output.
+Whir parses matching JSON records in memory, but uses and caches only **token
+counts, model names, timestamps, and project folder names** to compute cost
+estimates. It does not display, store, or upload conversation content, and it
+never opens credential files such as `~/.codex/auth.json`.
 
 ## What Whir does NOT do
 

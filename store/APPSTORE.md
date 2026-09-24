@@ -1,8 +1,10 @@
 # Mac App Store — submission guide
 
-This app is sandbox-ready: it reads only the token-count metadata in
+This app is sandbox-ready: it uses and caches only usage metadata from
 `~/.claude` and `~/.codex`, via folders the user grants once (security-scoped
-bookmarks). Its only network call is a once-a-day download of its public price
+bookmarks). Matching transcript records may also contain conversation content;
+the parser processes those records locally without storing that content.
+Its only network call is a once-a-day download of its public price
 table from GitHub (no user data sent; off-switchable in Settings). The same
 source builds as the direct/notarized app (sandbox code no-ops when not
 sandboxed).
@@ -86,8 +88,9 @@ carry over from the previous version automatically.
 > the reviewer's local AI-coding usage. On first launch it asks the user to grant
 > read-only access to two hidden folders, `~/.claude` and `~/.codex`. Each picker
 > opens directly inside the target folder, so clicking "Grant" once is enough;
-> connecting only one of the two folders is also fine. Whir reads only token
-> counts, timestamps, and model names there. Its only network connection is a
+> connecting only one of the two folders is also fine. Whir extracts only token
+> counts, timestamps, model names, and project paths from matching records; it
+> does not store or upload conversation content. Its only network connection is a
 > once-daily HTTPS GET of a public price table (pricing.json) from GitHub —
 > nothing about the user is sent, and it can be disabled in Settings.
 >
