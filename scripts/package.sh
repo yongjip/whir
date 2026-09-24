@@ -17,7 +17,7 @@ cp Resources/Info.plist "$APP/Contents/Info.plist"
 
 if [ -n "${DEVELOPER_ID:-}" ]; then
     codesign --force --options runtime --timestamp \
-        --entitlements Whir.entitlements --sign "$DEVELOPER_ID" "$APP"
+        --sign "$DEVELOPER_ID" "$APP"
     echo "signed with Developer ID: $DEVELOPER_ID (hardened runtime)"
 else
     codesign --force --sign - "$APP"

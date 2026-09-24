@@ -24,6 +24,15 @@ if ! codesign -dv "$APP" 2>&1 | grep -q "Authority=Developer ID Application"; th
     exit 1
 fi
 
+# The direct build reads local logs without folder-grant onboarding. Catch an
+# Xcode export that accidentally kept the Mac App Store sandbox entitlement.
+if codesign -d --entitlements :- "$APP" 2>/dev/null \
+    | plutil -p - 2>/dev/null \
+    | grep -q '"com.apple.security.app-sandbox" => true'; then
+    echo "error: $APP is sandboxed. Export the direct build without App Sandbox." >&2
+    exit 1
+fi
+
 # Build a drag-to-install DMG: the app + an /Applications alias to drop it into.
 rm -rf "$STAGE" "$DMG"; mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"

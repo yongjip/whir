@@ -28,10 +28,16 @@ signing + notarization so it passes Gatekeeper on other Macs.
 ## Release steps
 
 1. **Produce a Developer-ID-signed `dist/Whir.app`.** Two options:
-   - **Complete (recommended — the Shortcuts / App Intent works):** build via
-     Xcode so the AppIntents metadata and the full Info.plist are included.
-     Product → Archive → Distribute App → **Developer ID** → export, then copy
-     the exported `Whir.app` to `dist/Whir.app`.
+   - **Complete (recommended — the Shortcuts / App Intent works):** archive with
+     Xcode while clearing the App Store target's sandbox entitlement, then open
+     the archive in Xcode Organizer and Distribute App → **Developer ID** → export.
+     Copy the exported `Whir.app` to `dist/Whir.app`.
+     ```sh
+     xcodegen generate
+     xcodebuild -project Whir.xcodeproj -scheme Whir -configuration Release archive \
+       -archivePath build/Whir-direct.xcarchive CODE_SIGN_ENTITLEMENTS=
+     open build/Whir-direct.xcarchive
+     ```
    - **Quick (no Shortcuts action):** `swift build` can't generate AppIntents
      metadata, so the Shortcuts action is absent, but the core app is fine:
      ```sh
@@ -41,6 +47,8 @@ signing + notarization so it passes Gatekeeper on other Macs.
    ```sh
    scripts/notarize.sh        # builds the DMG, notarizes it, prints the sha256
    ```
+   The script rejects a sandboxed export so the direct build cannot silently
+   require folder grants.
 3. **Publish:** create a GitHub release `v0.1.0`, upload `dist/Whir.dmg`.
 4. **Homebrew:** put `Casks/whir.rb` in a tap repo (`yongjip/homebrew-tap`) and
    set `version` + the `sha256` printed in step 2. Users then:
