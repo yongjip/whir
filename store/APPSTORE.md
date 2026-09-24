@@ -105,6 +105,11 @@ carry over from the previous version automatically.
 
 ## What's New — paste into ASC for each update
 
+**v0.2.3 (build 9):**
+> - GPT-6 Sol usage now has an estimated value even when the saved model price table has not refreshed yet.
+> - Model prices are checked after your Mac wakes, and Whir now shows a warning if an update fails.
+> - Fixed monthly and 30-day totals when usage includes models without a known price.
+
 **v0.2.2 (build 7):**
 > - History can now group usage by project (alongside provider and model) —
 >   see what each project actually costs.

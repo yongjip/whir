@@ -77,6 +77,23 @@ import Foundation
         #expect(Pricing.builtIn.claudePrice("claude-sonnet-5")?.input == 3)
         #expect(Pricing.builtIn.claudePrice("claude-fable-5")?.input == 10)
         #expect(Pricing.builtIn.claudePrice("claude-haiku-4-5")?.input == 1)
+        #expect(Pricing.builtIn.openAIPrice("gpt-6-astra")?.input == 10)
+        #expect(Pricing.builtIn.openAIPrice("gpt-6-sol")?.input == 2)
+        #expect(Pricing.builtIn.openAIPrice("gpt-6-sol")?.cachedInput == 0.2)
+        #expect(Pricing.builtIn.openAIPrice("gpt-6-sol")?.output == 10)
+        #expect(Pricing.builtIn.openAIPrice("gpt-6-luna")?.input == 0.1)
+    }
+
+    @Test func olderDownloadCannotHideNewBuiltInModel() throws {
+        let cached = try #require(table("""
+        {"version": 1, "asOf": "2026-09-15",
+         "claude": [{"prefix": "claude-sonnet-5", "input": 3, "output": 15}],
+         "openai": [{"prefix": "gpt-6-astra", "input": 10, "cachedInput": 1, "output": 50}]}
+        """))
+        #expect(cached.openAIPrice("gpt-6-sol") == nil)
+        #expect(cached.openAIPrice("gpt-6-sol", fallback: Pricing.builtIn)?.input == 2)
+        #expect(cached.openAIPrice("gpt-6-sol-2026-09-22", fallback: Pricing.builtIn)?.output == 10)
+        #expect(cached.openAIPrice("gpt-6-terra", fallback: Pricing.builtIn) == nil)
     }
 
     @Test func olderOverrideIsRejected() throws {

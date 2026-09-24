@@ -41,9 +41,10 @@ public struct PricingTable {
     /// OpenAI base ids must not price a different future model (for example,
     /// `gpt-5` must not catch `gpt-5.6`). Exact ids win; a base row may cover
     /// only the provider's conventional dated snapshot suffix.
-    func openAIPrice(_ m: String) -> Pricing.OpenAI? {
+    func openAIPrice(_ m: String, fallback: PricingTable? = nil) -> Pricing.OpenAI? {
         if let exact = openai.first(where: { $0.0 == m }) { return exact.1 }
         return openai.first { Self.isDatedSnapshot(m, of: $0.0) }?.1
+            ?? fallback?.openAIPrice(m)
     }
 
     private static func isDatedSnapshot(_ model: String, of base: String) -> Bool {
@@ -94,6 +95,10 @@ public enum Pricing {
             ("gpt-5.4-mini",        OpenAI(input: 0.75, cachedInput: 0.075, output: 4.5, estimate: false)),   // corrected via LiteLLM (was a rough 0.25/2 guess)
             ("gpt-5.4",             OpenAI(input: 2.5,  cachedInput: 0.25,  output: 15,  estimate: false)),
             ("gpt-5.3-codex-spark", OpenAI(input: 0.50, cachedInput: 0.05,  output: 4,  estimate: true)),
+            // Official short-context Standard rates; keep available when a cached download predates GPT-6.
+            ("gpt-6-astra",         OpenAI(input: 10,   cachedInput: 1,     output: 50, estimate: false)),
+            ("gpt-6-sol",           OpenAI(input: 2,    cachedInput: 0.2,   output: 10, estimate: false)),
+            ("gpt-6-luna",          OpenAI(input: 0.1,  cachedInput: 0.01,  output: 0.5, estimate: false)),
         ])
 
     // The active table. Lock-guarded: lookups run on scan threads while the app
@@ -121,7 +126,7 @@ public enum Pricing {
 
     public static func openAIPrice(_ model: String?) -> OpenAI? {
         guard let m = model else { return nil }
-        return active.openAIPrice(m)
+        return active.openAIPrice(m, fallback: builtIn)
     }
 
     // MARK: - local override (the app's PricingUpdater writes it; core/CLI only read)

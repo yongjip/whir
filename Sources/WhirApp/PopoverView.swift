@@ -10,6 +10,7 @@ struct PopoverView: View {
     @AppStorage("sub.claude") private var claudeSub = 0.0
     @AppStorage("sub.codex") private var codexSub = 0.0
     @AppStorage("system.expanded") private var systemExpanded = false
+    @AppStorage(PricingUpdater.lastFailureKey) private var priceUpdateFailed = false
     private var totalSub: Double { claudeSub + codexSub }
 
     var body: some View {
@@ -267,11 +268,13 @@ struct PopoverView: View {
                 Text("Local logs only · no keychain · nothing uploaded")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
-            Text(Pricing.isStale()
-                 ? "⚠ prices as of \(Pricing.asOf) — may be outdated"
-                 : "prices as of \(Pricing.asOf)")
+            Text(priceUpdateFailed
+                 ? "Price update failed · prices as of \(Pricing.asOf)"
+                 : Pricing.isStale()
+                   ? "⚠ prices as of \(Pricing.asOf) — may be outdated"
+                   : "prices as of \(Pricing.asOf)")
                 .font(.system(size: 11))
-                .foregroundStyle(Pricing.isStale() ? Color.orange : Color.secondary)
+                .foregroundStyle(priceUpdateFailed || Pricing.isStale() ? Color.orange : Color.secondary)
                 .padding(.top, 2)
 
             if model.unpricedModels > 0 {
