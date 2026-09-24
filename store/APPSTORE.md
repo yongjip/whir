@@ -17,6 +17,17 @@ sandboxed).
   Verified: `xcodegen generate` + `xcodebuild build` (unsigned) succeed with the
   icon compiled in (`Assets.car`, `CFBundleIconName=AppIcon`).
 
+The selected icon is seven separate rounded square blocks forming a W, with a
+blue block at the upper right. The source render is `store/assets/app-icon-render.png`.
+The exporter applies a consistent rounded tile mask and writes `app-icon-master.png`
+alongside all output sizes. Regenerate both formats after replacing the source:
+
+```sh
+swift scripts/make_icon.swift build/AppIcon.iconset
+cp build/AppIcon.iconset/icon_*.png Assets.xcassets/AppIcon.appiconset/
+iconutil -c icns -o Resources/AppIcon.icns build/AppIcon.iconset
+```
+
 ## Build + upload (scripted — verified 2026-07-14 for 0.2.2 build 7)
 
 Bump `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in `project.yml` AND
