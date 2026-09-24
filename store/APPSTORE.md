@@ -66,6 +66,18 @@ Review notes + contact and the export-compliance answer
 (`ITSAppUsesNonExemptEncryption = NO` → `usesNonExemptEncryption: false`)
 carry over from the previous version automatically.
 
+### 0.2.3 submission (2026-09-24)
+
+- App Store Connect has macOS 0.2.3, build 9, in **Waiting for Review**.
+  Submission ID: `23718065-5657-4e38-8dea-95d9533d7b15` (submitted 13:30 KST).
+- The attached build is validated, and its included app icon visibly matches
+  the seven-block W asset. The public version is still 0.2.2.
+- The release setting is **manual release after approval**. Do not upload build 9
+  again or publish the approved version without separate publication approval.
+- `swift build` and `swift test` passed for the 0.2.3 source; physical-device
+  testing was unavailable. App Store Connect's What's New includes the icon
+  update and the three pricing fixes below.
+
 ## Metadata / ASO (bundle/brand = Whir; the exact name "Whir" was taken on the App Store, so the store listing name carries a descriptor — on-device name stays "Whir")
 - **Name** (≤30): `Whir: AI Usage & Cost`
 - **Subtitle** (≤30): `Token spend in your menu bar`
@@ -106,6 +118,7 @@ carry over from the previous version automatically.
 ## What's New — paste into ASC for each update
 
 **v0.2.3 (build 9):**
+> - Updated the app icon to a seven-block W.
 > - GPT-6 Sol usage now has an estimated value even when the saved model price table has not refreshed yet.
 > - Model prices are checked after your Mac wakes, and Whir now shows a warning if an update fails.
 > - Fixed monthly and 30-day totals when usage includes models without a known price.
