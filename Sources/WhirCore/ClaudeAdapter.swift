@@ -1,8 +1,8 @@
 import Foundation
 
 /// Reads Claude Code transcripts from ~/.claude/projects/**/*.jsonl.
-/// Only message.usage / model / timestamp / requestId / cwd are touched — never
-/// prompt text, generated code, or tool output.
+/// Only message.usage / model / timestamp / requestId / cwd are retained. Matching
+/// transcript lines are parsed as whole JSON records and may contain content.
 public struct ClaudeAdapter {
     public var root: String
     public init(root: String = homePath(".claude/projects")) { self.root = root }
@@ -15,7 +15,8 @@ public struct ClaudeAdapter {
     /// pruned/reset or bytes consumed) — the engine skips the cache write when
     /// a rescan found nothing new.
     @discardableResult
-    public func update(_ aggs: inout [String: FileAgg], window: Window) async -> Bool {
+    public func update(_ aggs: inout [String: FileAgg], window: Window,
+                       timeZone: TimeZone = .autoupdatingCurrent) async -> Bool {
         // Unreadable root (missing / access lost) → leave cached aggs untouched
         // rather than wiping them (which would force a full rescan on recovery).
         guard let found = files(under: root, suffix: ".jsonl") else { return false }
@@ -44,8 +45,9 @@ public struct ClaudeAdapter {
         }
 
         let win = window
+        let zone = timeZone
         let results = await scanConcurrently(jobs) { j in
-            await Self.scanFile(path: j.path, fa: j.fa, mtime: j.mtime, window: win)
+            await Self.scanFile(path: j.path, fa: j.fa, mtime: j.mtime, window: win, timeZone: zone)
         }
         for (path, fa, fileChanged) in results {
             aggs[path] = fa
@@ -55,10 +57,11 @@ public struct ClaudeAdapter {
     }
 
     private static func scanFile(path: String, fa faIn: FileAgg, mtime: Double,
-                                 window: Window) async -> (String, FileAgg, Bool) {
+                                 window: Window, timeZone: TimeZone) async -> (String, FileAgg, Bool) {
         var fa = faIn
         let startOffset = fa.offset
         guard let reader = LineReader(path: path, startOffset: fa.offset) else { return (path, fa, false) }
+        let monthKeyer: HourKeyer? = { if case .month = window { return HourKeyer(timeZone: timeZone) }; return nil }()
         var lineCount = 0
         while let raw = reader.nextRaw() {
             if !raw.terminated { continue }                      // mid-write tail: re-read when completed
@@ -67,7 +70,7 @@ public struct ClaudeAdapter {
             autoreleasepool {
                 guard let obj = jsonObject(raw.string), obj.str("type") == "assistant" else { return }
                 if case .month(let m) = window,
-                   !(obj.str("timestamp")?.hasPrefix(m) ?? false) { return }
+                   monthKeyer?.monthKey(obj.str("timestamp")) != m { return }
 
                 if let rid = obj.str("requestId") {
                     let h = fnv1a64(rid)                            // stored as a stable hash, not the string

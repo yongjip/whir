@@ -73,6 +73,59 @@ final class CachingIncrementalTests: XCTestCase {
         XCTAssertEqual(sumFiles(inc).2, 130)
     }
 
+    func testCodexMonthUsesEventTimeAndIncludesFlatArchives() async {
+        let base = tmpDir(); defer { try? FileManager.default.removeItem(atPath: base) }
+        let sessions = base + "/sessions"
+        let juneDir = sessions + "/2026/06/30"; mkdir(juneDir)
+        let archived = base + "/archived_sessions"; mkdir(archived)
+        write(ctx("gpt-5.5") + tok("2026-07-02T12:00:00Z", 100, 0, 10),
+              to: juneDir + "/rollout-started-in-june.jsonl")
+        write(ctx("gpt-5.5") + tok("2026-07-03T12:00:00Z", 200, 0, 20),
+              to: archived + "/rollout-flat-archive.jsonl")
+
+        let ad = CodexAdapter(root: sessions)
+        let utc = TimeZone(secondsFromGMT: 0)!
+        var july: [String: FileAgg] = [:]
+        await ad.update(&july, window: .month("2026-07"), timeZone: utc)
+        XCTAssertEqual(sumFiles(july).0, 300)
+        var june: [String: FileAgg] = [:]
+        await ad.update(&june, window: .month("2026-06"), timeZone: utc)
+        XCTAssertEqual(sumFiles(june).0, 0)
+    }
+
+    func testClaudeMonthUsesLocalTime() async {
+        let root = tmpDir(); defer { try? FileManager.default.removeItem(atPath: root) }
+        let proj = root + "/proj"; mkdir(proj)
+        write(claude("2026-06-30T23:30:00Z", req: "r1", model: "claude-opus-4-8",
+                     input: 100, output: 0), to: proj + "/a.jsonl")
+
+        let ad = ClaudeAdapter(root: root)
+        let seoul = TimeZone(identifier: "Asia/Seoul")!
+        var july: [String: FileAgg] = [:]
+        await ad.update(&july, window: .month("2026-07"), timeZone: seoul)
+        XCTAssertEqual(sumFiles(july).0, 100)
+        var june: [String: FileAgg] = [:]
+        await ad.update(&june, window: .month("2026-06"), timeZone: seoul)
+        XCTAssertEqual(sumFiles(june).0, 0)
+    }
+
+    func testCachesRejectBucketsFromAnotherTimeZone() {
+        let root = tmpDir(); defer { try? FileManager.default.removeItem(atPath: root) }
+        let monthURL = URL(fileURLWithPath: root + "/month.json")
+        ScanCache.save(["f": FileAgg(provider: .claude)], window: .month("2026-07"),
+                       timeZoneID: "Asia/Seoul", to: monthURL)
+        XCTAssertNotNil(ScanCache.load(window: .month("2026-07"),
+                                      timeZoneID: "Asia/Seoul", from: monthURL))
+        XCTAssertNil(ScanCache.load(window: .month("2026-07"),
+                                   timeZoneID: "America/Los_Angeles", from: monthURL))
+
+        let historyURL = URL(fileURLWithPath: root + "/history.json")
+        HistoryCache.save(["f": HourAgg(provider: .codex)],
+                          timeZoneID: "Asia/Seoul", to: historyURL)
+        XCTAssertNotNil(HistoryCache.load(timeZoneID: "Asia/Seoul", from: historyURL))
+        XCTAssertNil(HistoryCache.load(timeZoneID: "America/Los_Angeles", from: historyURL))
+    }
+
     // MARK: - Codex fork resumed across the boundary: incremental == full
 
     // The fork's replayed parent prefix is skipped only on the offset-0 scan; a

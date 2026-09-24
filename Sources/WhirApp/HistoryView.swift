@@ -18,12 +18,16 @@ struct HistoryView: View {
             } else {
                 legendView
                 HStack(alignment: .top, spacing: 16) {
-                    Group { if showChart { chart } else { spine } }.frame(width: 360)
+                    Group { if showChart && model.recentMax > 0 { chart } else { spine } }.frame(width: 360)
                     detailPanel
                 }
             }
             Text("Local logs only · no keychain · nothing uploaded · prices as of \(Pricing.asOf)")
                 .font(.caption2).foregroundStyle(.tertiary)
+            if model.recent.contains(where: { $0.hasUnpriced }) {
+                Text("— = price unknown · + = partial value")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            }
         }
         .padding(16)
         // Wide enough that the 360pt spine + the ~448pt drilldown table both fit
@@ -32,14 +36,20 @@ struct HistoryView: View {
         .task { model.start() }
     }
 
+    private func costLabel(_ total: Double, hasUnpriced: Bool) -> String {
+        guard hasUnpriced else { return moneyAdaptive(total) }
+        return total > 0 ? moneyAdaptive(total) + "+" : "—"
+    }
+
     // The one anchor number + controls.
     private var header: some View {
         HStack(spacing: 12) {
             if model.recent.isEmpty {
                 Text("Usage history").font(.title3.weight(.semibold))
             } else {
-                Text(moneyAdaptive(model.rangeTotal)).font(.title3.weight(.semibold)).monospacedDigit()
-                // "with usage" — recent shows buckets that had cost, not a contiguous calendar span.
+                Text(costLabel(model.rangeTotal, hasUnpriced: model.recent.contains { $0.hasUnpriced }))
+                    .font(.title3.weight(.semibold)).monospacedDigit()
+                // "with usage" — recent shows buckets with tokens, not a contiguous calendar span.
                 Text("\(model.recent.count) \(model.granularity.rawValue)s with usage")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -153,7 +163,8 @@ struct HistoryView: View {
                         .foregroundStyle(.secondary).frame(width: 78, alignment: .leading)
                     bar(p, lane: 150)
                     Spacer(minLength: 4)
-                    Text(moneyAdaptive(p.total)).font(.system(size: 12, weight: .medium)).monospacedDigit()
+                    Text(costLabel(p.total, hasUnpriced: p.hasUnpriced))
+                        .font(.system(size: 12, weight: .medium)).monospacedDigit()
                         .frame(width: 64, alignment: .trailing)
                 }
                 .tag(p.key)
@@ -218,7 +229,7 @@ struct HistoryView: View {
                         columnHeader
                         ForEach(d.projects) { p in
                             usageRow(AnyView(Text(p.project).font(.system(size: 11))
-                                .lineLimit(1).truncationMode(.middle)), p.tokens, p.cost)
+                                .lineLimit(1).truncationMode(.middle)), p.tokens, p.cost, priced: p.priced)
                         }
                     }
                 }

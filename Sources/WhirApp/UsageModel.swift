@@ -12,7 +12,15 @@ import WhirCore
 @Observable
 final class UsageModel {
     // Identify by name (stable) so ForEach doesn't churn on every recompute.
-    struct Row: Identifiable { let name: String; let cost: Double; let pct: Double; var id: String { name } }
+    struct Row: Identifiable {
+        let name: String
+        let cost: Double
+        let pct: Double
+        let hasUnpriced: Bool
+        var id: String { name }
+        var costLabel: String { hasUnpriced ? (cost > 0 ? money2(cost) + "+" : "—") : money2(cost) }
+        var percentLabel: String { hasUnpriced ? "—" : "\(Int((pct * 100).rounded()))%" }
+    }
 
     private var h: HistoryModel { HistoryModel.shared }
 
@@ -26,6 +34,13 @@ final class UsageModel {
     var codexReadable: Bool { h.roots.codexReadable }
     var total: Double { h.headline?.today ?? 0 }        // today's spend (the headline number)
     var last30: Double { h.headline?.last30 ?? 0 }      // last-30-days value, for the ROI line
+    var last30HasUnpriced: Bool { h.headline?.last30HasUnpriced ?? false }
+    var last30Label: String {
+        last30HasUnpriced ? (last30 > 0 ? moneyAdaptive(last30) + "+" : "—") : moneyAdaptive(last30)
+    }
+    var totalLabel: String {
+        unpricedModels > 0 ? (total > 0 ? money0(total) + "+" : "—") : money0(total)
+    }
     var unpricedModels: Int { h.headline?.unpricedModels ?? 0 }
     var unpricedTokenFraction: Double { h.headline?.unpricedTokenFraction ?? 0 }
 
@@ -33,8 +48,10 @@ final class UsageModel {
     var rows: [Row] {
         guard let hl = h.headline else { return [] }
         return [
-            Row(name: "Codex", cost: hl.codex, pct: hl.today > 0 ? hl.codex / hl.today : 0),
-            Row(name: "Claude Code", cost: hl.claude, pct: hl.today > 0 ? hl.claude / hl.today : 0),
+            Row(name: "Codex", cost: hl.codex, pct: hl.today > 0 ? hl.codex / hl.today : 0,
+                hasUnpriced: hl.codexUnpriced),
+            Row(name: "Claude Code", cost: hl.claude, pct: hl.today > 0 ? hl.claude / hl.today : 0,
+                hasUnpriced: hl.claudeUnpriced),
         ]
     }
 
@@ -43,7 +60,7 @@ final class UsageModel {
     // the app name, not "$0".
     var menuTitle: String {
         guard h.headline != nil else { return loading ? "AI $…" : "Whir" }
-        return money0(total)
+        return unpricedModels > 0 && total == 0 ? "AI —" : totalLabel
     }
 
     /// The History model owns the scan + its auto-refresh timer; just delegate.

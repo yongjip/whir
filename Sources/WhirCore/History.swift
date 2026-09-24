@@ -13,6 +13,7 @@ public struct SeriesPoint: Identifiable {
     public let label: String
     public let claude: Double
     public let codex: Double
+    public let hasUnpriced: Bool
     public var total: Double { claude + codex }
 }
 
@@ -30,6 +31,7 @@ public struct BucketDetail {
         public var id: String { project }
         public let project: String
         public let cost: Double
+        public let priced: Bool
         public let tokens: ModelTokens
     }
     public let total: Double
@@ -75,12 +77,12 @@ final class HourKeyer {
     private let iso = ISO8601DateFormatter()
     private let out = DateFormatter()
     private var memo: [String: String] = [:]   // UTC "yyyy-MM-ddTHH:mm" -> local key
-    init() {
+    init(timeZone: TimeZone = .autoupdatingCurrent) {
         isoFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         iso.formatOptions = [.withInternetDateTime]
         out.dateFormat = "yyyy-MM-dd HH"
         out.locale = Locale(identifier: "en_US_POSIX")
-        out.timeZone = .current
+        out.timeZone = timeZone
     }
     func key(_ ts: String?) -> String {
         guard let ts else { return "unknown" }
@@ -93,6 +95,10 @@ final class HourKeyer {
             memo[minute] = k
         }
         return k
+    }
+    func monthKey(_ ts: String?) -> String? {
+        let hour = key(ts)
+        return hour == "unknown" ? nil : String(hour.prefix(7))
     }
 }
 
@@ -118,7 +124,8 @@ enum ClaudeHistory {
     /// the engine skips the cache write when a rescan found nothing new.
     /// Files needing a read are scanned concurrently (ScanConfig kill switch).
     @discardableResult
-    static func update(_ aggs: inout [String: HourAgg], root: String) async -> Bool {
+    static func update(_ aggs: inout [String: HourAgg], root: String,
+                       timeZone: TimeZone = .autoupdatingCurrent) async -> Bool {
         guard let found = files(under: root, suffix: ".jsonl") else { return false }   // unreadable → keep cache
         let present = Set(found)
         var changed = false
@@ -136,8 +143,9 @@ enum ClaudeHistory {
             if !reset && id.size == fa!.offset { aggs[path] = fa; continue }
             jobs.append((path, fa!, id.mtime))
         }
+        let zone = timeZone
         let results = await scanConcurrently(jobs) { j in
-            await scanFile(path: j.path, fa: j.fa, mtime: j.mtime)
+            await scanFile(path: j.path, fa: j.fa, mtime: j.mtime, timeZone: zone)
         }
         for (path, fa, fileChanged) in results {
             aggs[path] = fa
@@ -147,11 +155,11 @@ enum ClaudeHistory {
     }
 
     private static func scanFile(path: String, fa faIn: HourAgg,
-                                 mtime: Double) async -> (String, HourAgg, Bool) {
+                                 mtime: Double, timeZone: TimeZone) async -> (String, HourAgg, Bool) {
         var fa = faIn
         let startOffset = fa.offset
         guard let reader = LineReader(path: path, startOffset: fa.offset) else { return (path, fa, false) }
-        let keyer = HourKeyer()   // per task — HourKeyer is not thread-safe
+        let keyer = HourKeyer(timeZone: timeZone)   // per task — HourKeyer is not thread-safe
         var lineCount = 0
         while let raw = reader.nextRaw() {
             if !raw.terminated { continue }
@@ -182,7 +190,8 @@ enum CodexHistory {
     /// Returns whether anything changed — see ClaudeHistory.update.
     /// Files needing a read are scanned concurrently (ScanConfig kill switch).
     @discardableResult
-    static func update(_ aggs: inout [String: HourAgg], root: String) async -> Bool {
+    static func update(_ aggs: inout [String: HourAgg], root: String,
+                       timeZone: TimeZone = .autoupdatingCurrent) async -> Bool {
         var roots = [root]
         let archived = (root as NSString).deletingLastPathComponent + "/archived_sessions"
         if FileManager.default.fileExists(atPath: archived) { roots.append(archived) }
@@ -211,8 +220,9 @@ enum CodexHistory {
             jobs.append((path, fa!, id.mtime))
         }
         let scanRoots = roots
+        let zone = timeZone
         let results = await scanConcurrently(jobs) { j in
-            await scanFile(path: j.path, fa: j.fa, mtime: j.mtime, roots: scanRoots)
+            await scanFile(path: j.path, fa: j.fa, mtime: j.mtime, roots: scanRoots, timeZone: zone)
         }
         for (path, fa, fileChanged) in results {
             aggs[path] = fa   // nil = caught mid-replay; re-read from 0 next scan
@@ -222,11 +232,11 @@ enum CodexHistory {
     }
 
     private static func scanFile(path: String, fa faIn: HourAgg, mtime: Double,
-                                 roots: [String]) async -> (String, HourAgg?, Bool) {
+                                 roots: [String], timeZone: TimeZone) async -> (String, HourAgg?, Bool) {
         var fa = faIn
         let startOffset = fa.offset
         guard let reader = LineReader(path: path, startOffset: fa.offset) else { return (path, fa, false) }
-        let keyer = HourKeyer()   // per task — HourKeyer is not thread-safe
+        let keyer = HourKeyer(timeZone: timeZone)   // per task — HourKeyer is not thread-safe
         var curModel = fa.lastModel
         var curProject = fa.lastProject
         var skipper = fa.offset == 0 ? CodexPrefixSkipper(forkPath: path, roots: roots) : nil
@@ -306,20 +316,31 @@ func buildSeries(_ aggs: [String: HourAgg], _ g: Granularity) -> [SeriesPoint] {
     var claude: [String: Double] = [:]
     var codex: [String: Double] = [:]
     var labels: [String: String] = [:]
+    var unpriced = Set<String>()
     var weekMemo: [String: (String, String)] = [:]
     for agg in aggs.values {
         for (hourKey, bd) in agg.buckets {
             var c = 0.0
-            for (model, t) in bd.models { c += cost(provider: agg.provider, model: model, tokens: t).usd }
-            if c == 0 { continue }
+            var hasTokens = false
+            var hasUnpriced = false
+            for (model, t) in bd.models {
+                guard t.total > 0 else { continue }
+                hasTokens = true
+                let pricedCost = cost(provider: agg.provider, model: model, tokens: t)
+                c += pricedCost.usd
+                hasUnpriced = hasUnpriced || !pricedCost.priced
+            }
+            if !hasTokens { continue }
             let (k, l) = rollupKey(hourKey, g, &weekMemo)
             labels[k] = l
+            if hasUnpriced { unpriced.insert(k) }
             if agg.provider == .claude { claude[k, default: 0] += c } else { codex[k, default: 0] += c }
         }
     }
     let keys = Set(claude.keys).union(codex.keys).sorted()
     return keys.map { SeriesPoint(key: $0, label: labels[$0] ?? $0,
-                                  claude: claude[$0] ?? 0, codex: codex[$0] ?? 0) }
+                                  claude: claude[$0] ?? 0, codex: codex[$0] ?? 0,
+                                  hasUnpriced: unpriced.contains($0)) }
 }
 
 // MARK: - grouped series (split each bucket by provider, model, or project)
@@ -337,6 +358,7 @@ public struct GroupedPoint: Identifiable {
     public let key: String
     public let label: String
     public let slices: [GroupSlice]          // sorted by cost desc
+    public let hasUnpriced: Bool
     public var total: Double { slices.reduce(0) { $0 + $1.cost } }
 }
 
@@ -345,24 +367,28 @@ public struct GroupedPoint: Identifiable {
 func buildGroupedSeries(_ aggs: [String: HourAgg], _ g: Granularity, _ by: GroupBy) -> [GroupedPoint] {
     var byBucket: [String: [String: Double]] = [:]   // bucketKey -> group -> cost
     var labels: [String: String] = [:]
+    var unpriced = Set<String>()
     var weekMemo: [String: (String, String)] = [:]
     for agg in aggs.values {
         for (hourKey, bd) in agg.buckets {
             let (k, l) = rollupKey(hourKey, g, &weekMemo)
             labels[k] = l
+            if bd.models.contains(where: { $0.value.total > 0 && !cost(provider: agg.provider, model: $0.key, tokens: $0.value).priced }) {
+                unpriced.insert(k)
+            }
             switch by {
             case .provider, .model:
                 for (model, t) in bd.models {
+                    if t.total == 0 { continue }
                     let c = cost(provider: agg.provider, model: model, tokens: t).usd
-                    if c == 0 { continue }
                     let group = (by == .provider) ? agg.provider.rawValue : model
                     byBucket[k, default: [:]][group, default: 0] += c
                 }
             case .project:
                 for (proj, pa) in bd.projects {
                     for (model, t) in pa.models {
+                        if t.total == 0 { continue }
                         let c = cost(provider: agg.provider, model: model, tokens: t).usd
-                        if c == 0 { continue }
                         byBucket[k, default: [:]][proj, default: 0] += c
                     }
                 }
@@ -372,7 +398,8 @@ func buildGroupedSeries(_ aggs: [String: HourAgg], _ g: Granularity, _ by: Group
     return byBucket.keys.sorted().map { k in
         let slices = byBucket[k]!.map { GroupSlice(name: $0.key, cost: $0.value) }
             .sorted { $0.cost > $1.cost }
-        return GroupedPoint(key: k, label: labels[k] ?? k, slices: slices)
+        return GroupedPoint(key: k, label: labels[k] ?? k, slices: slices,
+                            hasUnpriced: unpriced.contains(k))
     }
 }
 
@@ -380,6 +407,7 @@ func buildGroupedSeries(_ aggs: [String: HourAgg], _ g: Granularity, _ by: Group
 func buildDetail(_ aggs: [String: HourAgg], _ bucketKey: String, _ g: Granularity) -> BucketDetail {
     var modelTokens: [String: (provider: Provider, model: String, tokens: ModelTokens)] = [:]
     var projectCost: [String: Double] = [:]
+    var unpricedProjects = Set<String>()
     var projectTokens: [String: ModelTokens] = [:]
     var weekMemo: [String: (String, String)] = [:]
     for agg in aggs.values {
@@ -394,7 +422,9 @@ func buildDetail(_ aggs: [String: HourAgg], _ bucketKey: String, _ g: Granularit
             // whatever price table is active right now — never stored.
             for (p, pa) in bd.projects {
                 for (model, t) in pa.models {
-                    projectCost[p, default: 0] += cost(provider: agg.provider, model: model, tokens: t).usd
+                    let pricedCost = cost(provider: agg.provider, model: model, tokens: t)
+                    projectCost[p, default: 0] += pricedCost.usd
+                    if t.total > 0 && !pricedCost.priced { unpricedProjects.insert(p) }
                     projectTokens[p] = (projectTokens[p] ?? ModelTokens()) + t
                 }
             }
@@ -406,7 +436,8 @@ func buildDetail(_ aggs: [String: HourAgg], _ bucketKey: String, _ g: Granularit
                                      cost: c.usd, priced: c.priced, tokens: $0.tokens)
     }.sorted { $0.cost != $1.cost ? $0.cost > $1.cost : $0.tokens.total > $1.tokens.total }
     let projectRows = projectTokens.map {
-        BucketDetail.ProjectRow(project: $0.key, cost: projectCost[$0.key] ?? 0, tokens: $0.value)
+        BucketDetail.ProjectRow(project: $0.key, cost: projectCost[$0.key] ?? 0,
+                                priced: !unpricedProjects.contains($0.key), tokens: $0.value)
     }.sorted { $0.cost > $1.cost }
     return BucketDetail(total: modelRows.reduce(0) { $0 + $1.cost }, models: modelRows, projects: projectRows)
 }

@@ -142,6 +142,29 @@ final class HistoryTests: XCTestCase {
         XCTAssertEqual(byProject[0].slices.first?.name, "backend", "slices sorted by cost desc")
     }
 
+    func testUnpricedUsageRemainsVisibleWithUnknownCost() {
+        var a = HourAgg(provider: .claude)
+        let unknown = tok(input: 1_000)
+        a.buckets["2026-06-15 09"] = bd(["future-model": unknown],
+                                        ["backend": ["future-model": unknown]])
+        let aggs = ["f": a]
+
+        let series = buildSeries(aggs, .day)
+        XCTAssertEqual(series.map(\.key), ["2026-06-15"])
+        XCTAssertEqual(series[0].total, 0)
+        XCTAssertTrue(series[0].hasUnpriced)
+        for group in GroupBy.allCases {
+            let points = buildGroupedSeries(aggs, .day, group)
+            XCTAssertEqual(points.count, 1)
+            XCTAssertTrue(points[0].hasUnpriced)
+            XCTAssertEqual(points[0].total, 0)
+        }
+        let detail = buildDetail(aggs, "2026-06-15", .day)
+        XCTAssertEqual(detail.models.first?.model, "future-model")
+        XCTAssertEqual(detail.models.first?.priced, false)
+        XCTAssertEqual(detail.projects.first?.priced, false)
+    }
+
     // CSV export: full fidelity rows, RFC-ish quoting, and the honesty rule —
     // unpriced models get an EMPTY cost cell, never 0.00.
     func testCSVExport() {

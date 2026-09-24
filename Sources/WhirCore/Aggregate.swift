@@ -124,6 +124,7 @@ public struct UsageReport {
     }
     public var models: [ModelLine] = []
     public var costByProject: [String: Double] = [:]
+    public var unpricedProjects: Set<String> = []
     public var filesScanned = 0
 
     public var totalCost: Double { models.reduce(0) { $0 + $1.cost } }
@@ -131,6 +132,10 @@ public struct UsageReport {
         models.filter { $0.provider == p }.reduce(0) { $0 + $1.cost }
     }
     public var hasEstimates: Bool { models.contains { $0.estimate } }
+    public var hasUnpriced: Bool { models.contains { !$0.priced && $0.tokens.total > 0 } }
+    public func hasUnpriced(for p: Provider) -> Bool {
+        models.contains { $0.provider == p && !$0.priced && $0.tokens.total > 0 }
+    }
 
     public static func build(from aggs: [String: FileAgg]) -> UsageReport {
         var tokensByKey: [String: (Provider, String, ModelTokens)] = [:]
@@ -154,8 +159,12 @@ public struct UsageReport {
         r.filesScanned = aggs.count
         // Cost is pure arithmetic over already-in-memory tokens — computed here,
         // fresh, under whatever price table is active right now.
-        r.costByProject = projModelTokens.mapValues { byModel in
-            byModel.reduce(0.0) { $0 + WhirCore.cost(provider: .claude, model: $1.key, tokens: $1.value).usd }
+        for (project, byModel) in projModelTokens {
+            for (model, tokens) in byModel {
+                let pricedCost = WhirCore.cost(provider: .claude, model: model, tokens: tokens)
+                r.costByProject[project, default: 0] += pricedCost.usd
+                if tokens.total > 0 && !pricedCost.priced { r.unpricedProjects.insert(project) }
+            }
         }
         for (_, v) in tokensByKey {
             let (usd, priced, est) = WhirCore.cost(provider: v.0, model: v.1, tokens: v.2)

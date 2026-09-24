@@ -25,8 +25,11 @@ final class HistoryModel {
         let codex: Double
         let claude: Double
         let last30: Double
+        let last30HasUnpriced: Bool
         let unpricedModels: Int
         let unpricedTokenFraction: Double
+        let codexUnpriced: Bool
+        let claudeUnpriced: Bool
     }
     private(set) var headline: Headline?
     /// Per-provider root readability (for "connect this tool" hints); readable
@@ -117,7 +120,9 @@ final class HistoryModel {
         let daily = snap.grouped(.day, by: .provider)
         // Trailing 30 CALENDAR days (today-29 … today), not the last 30 days that
         // had usage — the latter over-inflates the ROI headline for intermittent users.
-        let last30 = sumFrom(cutoff: Self.dayKey(daysAgo: 29), daily.map { ($0.key, $0.total) })
+        let cutoff = Self.dayKey(daysAgo: 29)
+        let last30 = sumFrom(cutoff: cutoff, daily.map { ($0.key, $0.total) })
+        let last30HasUnpriced = daily.contains { $0.key != "unknown" && $0.key >= cutoff && $0.hasUnpriced }
         var today = 0.0, cx = 0.0, cl = 0.0
         if let p = daily.last(where: { $0.key == Self.todayKey }) {
             today = p.total
@@ -127,20 +132,24 @@ final class HistoryModel {
         var totalTokens = 0
         var unpricedTokens = 0
         var unpricedModels = 0
+        var codexUnpriced = false, claudeUnpriced = false
         for model in detail.models {
             // Codex cached input is a subset of input, while Claude cache
             // read/write tokens are separate. Count each physical token once.
             let t = model.tokens
             let count = t.input + t.output + t.cacheRead + t.cacheWrite5m + t.cacheWrite1h
             totalTokens += count
-            if !model.priced {
+            if !model.priced && count > 0 {
                 unpricedTokens += count
                 unpricedModels += 1
+                if model.provider == .codex { codexUnpriced = true } else { claudeUnpriced = true }
             }
         }
         let fraction = totalTokens > 0 ? Double(unpricedTokens) / Double(totalTokens) : 0
         headline = Headline(today: today, codex: cx, claude: cl, last30: last30,
-                            unpricedModels: unpricedModels, unpricedTokenFraction: fraction)
+                            last30HasUnpriced: last30HasUnpriced,
+                            unpricedModels: unpricedModels, unpricedTokenFraction: fraction,
+                            codexUnpriced: codexUnpriced, claudeUnpriced: claudeUnpriced)
     }
 
     /// Local "yyyy-MM-dd" — matches the History day-bucket keys.
@@ -151,7 +160,8 @@ final class HistoryModel {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         f.locale = Locale(identifier: "en_US_POSIX")
-        let date = Calendar.current.date(byAdding: .day, value: -n, to: Date()) ?? Date()
+        f.timeZone = .autoupdatingCurrent
+        let date = Calendar.autoupdatingCurrent.date(byAdding: .day, value: -n, to: Date()) ?? Date()
         return f.string(from: date)
     }
 

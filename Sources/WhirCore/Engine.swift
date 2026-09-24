@@ -19,11 +19,13 @@ public struct UsageEngine {
     public func refresh(window: Window,
                         claudeProjects: String = homePath(".claude/projects"),
                         codexSessions: String? = nil) async -> UsageReport {
-        var aggs = ScanCache.load(window: window) ?? [:]
-        let claudeChanged = await ClaudeAdapter(root: claudeProjects).update(&aggs, window: window)
-        let codexChanged = await CodexAdapter(root: codexSessions).update(&aggs, window: window)
+        let zoneID = TimeZone.autoupdatingCurrent.identifier
+        let zone = TimeZone(identifier: zoneID) ?? .current
+        var aggs = ScanCache.load(window: window, timeZoneID: zoneID) ?? [:]
+        let claudeChanged = await ClaudeAdapter(root: claudeProjects).update(&aggs, window: window, timeZone: zone)
+        let codexChanged = await CodexAdapter(root: codexSessions).update(&aggs, window: window, timeZone: zone)
         if claudeChanged || codexChanged {
-            ScanCache.save(aggs, window: window)
+            ScanCache.save(aggs, window: window, timeZoneID: zoneID)
             // Hand the scan's transient allocation burst back to the OS immediately,
             // rather than leaving it resident-but-reclaimable for macOS to notice later.
             malloc_zone_pressure_relief(nil, 0)
@@ -37,5 +39,6 @@ public func currentMonthKey(_ date: Date = Date()) -> String {
     let f = DateFormatter()
     f.dateFormat = "yyyy-MM"
     f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = .autoupdatingCurrent
     return f.string(from: date)
 }

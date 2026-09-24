@@ -27,11 +27,34 @@ final class CostTests: XCTestCase {
         XCTAssertNil(claudeCost(model: "<synthetic>", usage: ["input_tokens": 100]))
     }
 
+    func testUnpricedReportDoesNotPresentUnknownCostAsZero() {
+        var tokens = ModelTokens(); tokens.input = 1_000
+        var file = FileAgg(provider: .claude)
+        file.models["future-model"] = tokens
+        file.tokensByProject["backend"] = ["future-model": tokens]
+        let report = UsageReport.build(from: ["f": file])
+        let rendered = report.render(windowLabel: "test")
+
+        XCTAssertTrue(report.hasUnpriced)
+        XCTAssertTrue(report.unpricedProjects.contains("backend"))
+        XCTAssertTrue(rendered.contains("future-model"))
+        XCTAssertTrue(rendered.contains("ALL AI: —"))
+        for line in rendered.split(separator: "\n") where line.contains("future-model") || line.contains("backend") {
+            XCTAssertTrue(line.contains("—"), "unknown model and project costs must not render as $0.00")
+        }
+    }
+
     // Real Codex last_token_usage (gpt-5.5): cached ⊂ input, reasoning ⊂ output.
     func testCodexCostAppliesCachedDiscount() {
         let c = codexCost(model: "gpt-5.5", input: 21070, cachedInput: 4992, output: 296)
         // (21070-4992)*5 + 4992*0.5 + 296*30, all /1e6
         XCTAssertEqual(c!, 0.091766, accuracy: 1e-5)
+    }
+
+    func testGPT6SolUsageHasEstimatedCost() {
+        let c = codexCost(model: "gpt-6-sol", input: 42_800_000,
+                          cachedInput: 42_300_000, output: 81_000)
+        XCTAssertEqual(c!, 10.27, accuracy: 1e-9)
     }
 
     func testOpenAIExactModelWins() {

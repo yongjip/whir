@@ -65,11 +65,12 @@ struct PopoverView: View {
         let shownSub = Int(totalSub.rounded())   // divide by the SAME number we display
         // Lead with the concrete last-30-days spend; the ROI multiple (vs the
         // monthly subscription) is the supporting context.
-        if totalSub >= 1, let mult = roiMultiplier(total: model.last30, subscription: Double(shownSub)) {
+        if totalSub >= 1, !model.last30HasUnpriced,
+           let mult = roiMultiplier(total: model.last30, subscription: Double(shownSub)) {
             let win = mult >= 1   // below break-even shouldn't look like a value "win"
             roiBlock(win: win, accent: win) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(moneyAdaptive(model.last30))
+                    Text(model.last30Label)
                         .font(.system(size: 16, weight: .semibold)).monospacedDigit()
                         .foregroundStyle(win ? Color.accentColor : .primary)
                     Text(win ? "Last 30 days · \(roiText(mult)) your $\(shownSub)/mo"
@@ -79,11 +80,20 @@ struct PopoverView: View {
                 }
                 Spacer(minLength: 0)
             }
+        } else if model.last30HasUnpriced && totalSub >= 1 {
+            roiBlock(win: false, accent: false) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model.last30Label).font(.system(size: 16, weight: .semibold)).monospacedDigit()
+                    Text("Last 30 days · some models have no price")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
         } else {
             // No subscription set yet — still show the 30-day spend, plus a prompt.
             roiBlock(win: false, accent: false) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(moneyAdaptive(model.last30))
+                    Text(model.last30Label)
                         .font(.system(size: 16, weight: .semibold)).monospacedDigit()
                     Text("Last 30 days").font(.system(size: 11)).foregroundStyle(.secondary)
                 }
@@ -134,7 +144,7 @@ struct PopoverView: View {
     private var grantView: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Grant read access").font(.system(size: 14, weight: .medium))
-            Text("Whir reads token counts from your local Claude Code and Codex folders — nothing else, never uploaded. Each picker opens on the right folder; just click Grant. Use only one of the tools? One folder is enough.")
+            Text("Whir scans local Claude Code and Codex logs to calculate usage value. It stores only usage metadata and uploads nothing. Each picker opens on the right folder; just click Grant. Use only one of the tools? One folder is enough.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
             Button(FolderAccess.hasBookmark(FolderAccess.claudeID) ? "✓ ~/.claude granted" : "Grant ~/.claude…") {
                 // Chain the second picker so both grants are one flow.
@@ -182,7 +192,7 @@ struct PopoverView: View {
                 noLogsView
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(money0(model.total)).font(.system(size: 34, weight: .medium)).monospacedDigit()
+                    Text(model.totalLabel).font(.system(size: 34, weight: .medium)).monospacedDigit()
                     Text("estimated").font(.system(size: 11))
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(Color.accentColor.opacity(0.15), in: Capsule())
@@ -199,8 +209,8 @@ struct PopoverView: View {
                     HStack {
                         Text(row.name).font(.system(size: 14))
                         Spacer()
-                        Text(money2(row.cost)).font(.system(size: 14, weight: .medium)).monospacedDigit()
-                        Text("\(Int((row.pct * 100).rounded()))%")
+                        Text(row.costLabel).font(.system(size: 14, weight: .medium)).monospacedDigit()
+                        Text(row.percentLabel)
                             .font(.system(size: 11)).foregroundStyle(.secondary)
                             .frame(width: 36, alignment: .trailing)
                     }.padding(.vertical, 5)

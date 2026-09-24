@@ -70,22 +70,27 @@ if args.contains("--history") {
                 m.priced ? String(format: "$%.2f", m.cost) : "—")   // no price row ≠ free
         }
         print("By project:"); header("project")
-        for p in d.projects { row(p.project, p.tokens, String(format: "$%.2f", p.cost)) }
-        print("  total: \(money(d.total))")
+        for p in d.projects { row(p.project, p.tokens, p.priced ? String(format: "$%.2f", p.cost) : "—") }
+        print("  total: \(d.models.contains(where: { !$0.priced }) ? money(d.total) + "+" : money(d.total))")
         exit(0)
     }
 
     var points = snapshot.series(g)
     if let n = last, points.count > n { points = Array(points.suffix(n)) }
-    let maxTotal = points.map(\.total).max() ?? 1
+    let maxTotal = max(points.map(\.total).max() ?? 0, 1)
     print("================ usage by \(g.rawValue) (estimated value) ================")
     for p in points {
         let bars = Int((p.total / maxTotal * 28).rounded())
         let bar = String(repeating: "█", count: max(bars, p.total > 0 ? 1 : 0))
-        print("  \(p.label.padding(toLength: 13, withPad: " ", startingAt: 0)) \(money(p.total))  \(bar)")
+        let value = p.hasUnpriced ? (p.total == 0 ? "—" : money(p.total) + "+") : money(p.total)
+        print("  \(p.label.padding(toLength: 13, withPad: " ", startingAt: 0)) \(value)  \(bar)")
     }
     print("  prices as of \(Pricing.asOf) · local logs only, no credentials")
-    print("  range total: \(money(points.reduce(0) { $0 + $1.total }))")
+    let rangeTotal = points.reduce(0) { $0 + $1.total }
+    let rangeUnpriced = points.contains { $0.hasUnpriced }
+    let rangeLabel = rangeUnpriced ? (rangeTotal > 0 ? money(rangeTotal) + "+" : "—") : money(rangeTotal)
+    print("  range total: \(rangeLabel)")
+    if rangeUnpriced { print("  — = price unknown · + = partial value") }
     exit(0)
 }
 

@@ -21,24 +21,17 @@ public struct CodexAdapter {
     /// only READS other files), so results merge deterministically by path.
     /// Returns whether anything changed (files pruned/reset or bytes consumed).
     @discardableResult
-    public func update(_ aggs: inout [String: FileAgg], window: Window) async -> Bool {
+    public func update(_ aggs: inout [String: FileAgg], window: Window,
+                       timeZone: TimeZone = .autoupdatingCurrent) async -> Bool {
         var roots = [root]
         let archived = (root as NSString).deletingLastPathComponent + "/archived_sessions"
         if FileManager.default.fileExists(atPath: archived) { roots.append(archived) }
-
-        let needle: String? = {
-            if case .month(let m) = window { return "/" + m.replacingOccurrences(of: "-", with: "/") + "/" }
-            return nil
-        }()
 
         var present = Set<String>()
         var allReadable = true
         for r in roots {
             guard let found = files(under: r, suffix: ".jsonl") else { allReadable = false; continue }
-            for path in found {
-                if let n = needle, !path.contains(n) { continue }
-                present.insert(path)
-            }
+            for path in found { present.insert(path) }
         }
         var changed = false
         // Only prune when every root was readable — a transient access failure
@@ -67,8 +60,11 @@ public struct CodexAdapter {
         }
 
         let scanRoots = roots
+        let win = window
+        let zone = timeZone
         let results = await scanConcurrently(jobs) { j in
-            await Self.scanFile(path: j.path, fa: j.fa, mtime: j.mtime, roots: scanRoots)
+            await Self.scanFile(path: j.path, fa: j.fa, mtime: j.mtime,
+                                roots: scanRoots, window: win, timeZone: zone)
         }
         for (path, fa, fileChanged) in results {
             aggs[path] = fa   // nil = caught mid-replay; re-read from 0 next scan
@@ -78,10 +74,12 @@ public struct CodexAdapter {
     }
 
     private static func scanFile(path: String, fa faIn: FileAgg, mtime: Double,
-                                 roots: [String]) async -> (String, FileAgg?, Bool) {
+                                 roots: [String], window: Window,
+                                 timeZone: TimeZone) async -> (String, FileAgg?, Bool) {
         var fa = faIn
         let startOffset = fa.offset
         guard let reader = LineReader(path: path, startOffset: fa.offset) else { return (path, fa, false) }
+        let monthKeyer: HourKeyer? = { if case .month = window { return HourKeyer(timeZone: timeZone) }; return nil }()
         var curModel = fa.lastModel    // carry model across the resume boundary
         // On a from-scratch read of a forked session, skip the replayed parent prefix.
         var skipper = fa.offset == 0 ? CodexPrefixSkipper(forkPath: path, roots: roots) : nil
@@ -115,6 +113,8 @@ public struct CodexAdapter {
 
                 let model = curModel ?? "unknown"
                 if Pricing.excludedModels.contains(model) { return }
+                if case .month(let m) = window,
+                   monthKeyer?.monthKey(obj.str("timestamp")) != m { return }
 
                 var t = ModelTokens()
                 t.input = tup[0]; t.cachedInput = tup[1]; t.output = tup[2]
