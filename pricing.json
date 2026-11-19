@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "asOf": "2026-11-18",
+  "asOf": "2026-11-19",
   "comment": "Whir model price table ($/1M tokens); Claude family-prefix matched, OpenAI exact-id matched with dated-snapshot fallback; fetched daily by the app. Auto-synced from LiteLLM's model_prices_and_context_window.json by scripts/sync_pricing.py \u2014 edit that script, not this file. Claude cache multipliers are fixed in code: read 0.1x input, write-5m 1.25x, write-1h 2x.",
   "claude": [
     {
@@ -434,9 +434,9 @@
     },
     {
       "prefix": "gpt-6-rosalind",
-      "input": 15,
-      "cachedInput": 1.5,
-      "output": 75,
+      "input": 10,
+      "cachedInput": 1,
+      "output": 50,
       "estimate": false
     },
     {
